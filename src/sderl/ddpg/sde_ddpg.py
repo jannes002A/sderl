@@ -1,33 +1,32 @@
 #!/usr/bin/env python
-# coding: utf-8
-
-import sys
-import os
-import gym
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
-from ddpg import DDPGagent
-from utils import *
-import torch as T
-import sklearn.preprocessing
-import pdb
-from collections import deque
-import itertools
-import json
-
-sys.path.append('../../environments')
-import env_sde
-#from utils import NormalizedEnv, OUNoise
 
 import argparse
+from collections import deque
+import json
+import os
+import itertools
+
+import gym
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import sklearn.preprocessing
+import torch as T
+
+from sderl.ddpg.ddpg import DDPGagent
+from sderl.ddpg.utils import *
+
+from molecules.models.double_well import DoubleWell
+#from utils import NormalizedEnv, OUNoise
+
+# set parser
 parser = argparse.ArgumentParser()
 #parser.add_argument('-b', default=1, help='pick a set of parameters')
 parser.add_argument('-n', default = 256, help='network size')
 parser.add_argument('-s', default = 15000, help = 'max number of trajectories')
 args = parser.parse_args()
 
-#------------set parameters-------------
+# set parameters
 num_break = int(args.s)
 lbetas = [4.0]
 lrates = [1e-3,1e-4,1e-5,1e-6]

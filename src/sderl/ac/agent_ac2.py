@@ -1,8 +1,8 @@
+import numpy as np
 import torch as T
 import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
-import numpy as np
 
 class NNetwork(nn.Module):
     def __init__(self, alpha, input_dims, hidden_dim, output_dim):

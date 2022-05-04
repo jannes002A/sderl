@@ -1,5 +1,5 @@
-from typing import Tuple
 import os
+from typing import Tuple
 
 def make_folder(path:str) -> Tuple[str, str]:
     """ Create directory to save results and mode.

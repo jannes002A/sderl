@@ -10,9 +10,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch as T
 
-import environments.models.double_well as dw
-import environments.methods.euler_maruyama_batch as em
-from soc_agent import SOCAgent
+import molecules.models.double_well as dw
+import molecules.methods.euler_maruyama_batch as em
+from sderl.soc.soc_agent import SOCAgent
 
 # parser
 parser = argparse.ArgumentParser()
@@ -20,7 +20,7 @@ parser.add_argument('-b', default=1, help='pick a set of parameters')
 args = parser.parse_args()
 
 # lists of parameters
-l_betas = [0.5, 2.0]                        # inverse of the temperature
+l_betas = [1.0, 2.0]                        # inverse of the temperature
 l_rates = [1e-2, 1e-3, 1e-4, 1e-5, 1e-6]    # learning rate
 l_sizes = [32, 64, 128, 256]                # network size
 
@@ -33,8 +33,6 @@ stop = -2.0
 max_n_steps = 10e+8
 max_n_ep = 5
 
-# path
-path = 'algorithms/soc/data/soc_model/'
 
 def main():
 
@@ -57,12 +55,15 @@ def main():
     agent_end = SOCAgent(sampler, hidden_size=net_size, actor_learning_rate=lrate,
                          stop=stop, gamma=1.0)
 
+    # relative path of the results of the soc agent
+    path = 'res/soc_model/'
+
     # load results
     agent_init.actor.load_state_dict(
-        T.load(os.path.join(os.path.join(path, agent_init.log_name + '_soc-actor-start.pkl')))
+        T.load(os.path.join(path, agent_init.log_name + '_soc-actor-start.pkl'))
     )
     agent_end.actor.load_state_dict(
-        T.load(os.path.join(os.path.join(path, agent_end.log_name + '_soc-actor-last.pkl')))
+        T.load(os.path.join(path, agent_end.log_name + '_soc-actor-last.pkl'))
     )
 
     # discretized domain

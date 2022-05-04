@@ -1,13 +1,13 @@
-import numpy as np
-import gym
 from collections import deque
-import random
 
+import gym
+import numpy as np
+import random
 
 # Ornstein-Ulhenbeck Process
 # Taken from #https://github.com/vitchyr/rlkit/blob/master/rlkit/exploration_strategies/ou_strategy.py
 class OUNoise(object):
-    '''OU Class for exploration explotation. 
+    '''OU Class for exploration explotation.
     Does perturbe the action randomly  '''
     def __init__(self, action_space, mu=0.0, theta=0.15, max_sigma=0.3, min_sigma=0.3, decay_period=100000):
         self.mu           = mu
@@ -20,18 +20,18 @@ class OUNoise(object):
         self.low          = action_space.low
         self.high         = action_space.high
         self.reset()
-        
+
     def reset(self):
         """Sets starting point."""
         self.state = np.ones(self.action_dim) * self.mu
-        
+
     def evolve_state(self):
         """Evolves state"""
         x  = self.state
         dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.action_dim)
         self.state = x + dx
         return self.state
-    
+
     def get_action(self, action, t=0):
         """perturbes action"""
         ou_state = self.evolve_state()
@@ -115,7 +115,7 @@ class Memory:
             reward_batch.append(reward)
             next_state_batch.append(next_state)
             done_batch.append(done)
-        
+
         return state_batch, action_batch, reward_batch, next_state_batch, done_batch
 
     def __len__(self):

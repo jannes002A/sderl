@@ -1,30 +1,29 @@
 #!/usr/bin/env python
-# coding: utf-8
-"""Script for run DDPG with and SDE environment"""
-import itertools
+
+import argparse
+from collections import deque
 import json
+import itertools
 import os
-import sys
+from typing import Tuple
+
 import jax.numpy as jnp
 import numpy as np
 import sklearn.preprocessing
 import torch as T
-from collections import deque
-from ddpg import DDPGagent
-from typing import Tuple
 
-import argparse
+from sderl.ddpg import DDPGagent
+import sderl.utils.make_folder as mk
+import molecules.models.butan as butan
+import molecules.methods.euler_maruyama as em
+
+# set parser
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', default=1, help='pick a set of parameters')
 parser.add_argument('-s', default=15000, help='max number of trajectories')
 args = parser.parse_args()
 
-sys.path.append('../../../')
-import algorithms.utils.make_folder as mk
-import environments.models.butan as butan
-import environments.methods.euler_maruyama as em
-
-# ------------set parameters-------------
+# set parameters
 num_break = int(args.s)
 lbetas = [2.0]
 lrates = [1e-3, 1e-4, 1e-5, 1e-6]
@@ -187,6 +186,7 @@ def main_ddpg(env, batch_size=128):
 
 
 if __name__ == '__main__':
+    """Script for run DDPG with and SDE environment"""
     q = jnp.array([[0.1, 0.2, 0.1, 0.2], [0.1, 0.2, 0.3, 0.4], [0.0, 0.0, 0.0, 0.0]])
 
     # define environment

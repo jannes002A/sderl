@@ -1,9 +1,9 @@
 import jax
-import optax
 import jax.numpy as jnp
-from networks_jax import Actor, Critic
-from utils import Memory
+import optax
 
+from sderl.ddpg.networks_jax import Actor, Critic
+from sderl.ddpg.utils import Memory
 
 class DDPGagent:
     """Call for Deep Deterministic policy gradient method

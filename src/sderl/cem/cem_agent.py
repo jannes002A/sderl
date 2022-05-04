@@ -1,10 +1,10 @@
+import math
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-
-import numpy as np
-import math
 
 #device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
