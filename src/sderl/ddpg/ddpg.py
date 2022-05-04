@@ -4,8 +4,8 @@ import torch.optim as optim
 import torch.nn as nn
 import numpy as np
 
-from networks import Actor, Critic
-from utils import Memory
+from sderl.ddpg.networks import Actor, Critic
+from sderl.ddpg.utils import Memory
 
 
 class DDPGagent:

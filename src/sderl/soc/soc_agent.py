@@ -11,8 +11,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import sklearn.preprocessing
 
-from utils import make_folder
-from networks import Actor
+from sderl.soc.utils import make_folder
+from sderl.soc.networks import Actor
 
 class SOCAgent:
     """ Call for SOC problem with agent
@@ -182,7 +182,7 @@ class SOCAgent:
         # update paramters
         self.actor_optimizer.step()
 
-    def train(self, batch_size=1000, max_n_ep=100, folder=None):
+    def train(self, batch_size=1000, max_n_ep=100):
         """ train the actor nn by performing sgd of the associated soc problem. The trajectories
             are sampled one after the other
 
@@ -197,7 +197,7 @@ class SOCAgent:
         sampler = self.sampler
 
         # define folder to save results
-        folder_model, folder_result = make_folder(folder)
+        folder_model, folder_result = make_folder('res/')
 
         # define list to store results
         returns = []
@@ -322,7 +322,7 @@ class SOCAgent:
 
         return rewards, steps
 
-    def train_vectorized(self, batch_size=1000, max_n_ep=100, max_n_steps='1e8', folder=None):
+    def train_vectorized(self, batch_size=1000, max_n_ep=100, max_n_steps='1e8'):
         """function for applying soc agent to an environment
 
         Parameters
@@ -338,7 +338,7 @@ class SOCAgent:
         sampler = self.sampler
 
         # define folder to save results
-        folder_model, folder_result = make_folder(folder)
+        folder_model, folder_result = make_folder('res/')
 
         # define list to store results
         returns = []

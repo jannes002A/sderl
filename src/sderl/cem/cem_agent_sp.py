@@ -1,10 +1,10 @@
+import math
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
-
-import numpy as np
-import math
 
 
 class Agent(nn.Module):
@@ -13,7 +13,6 @@ class Agent(nn.Module):
         self.env = env
         self.action_dim = action_dim
 
- 
     def evaluate(self, weights, gamma=1.0):
         episode_return = 0.0
         state = self.env.reset()

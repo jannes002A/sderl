@@ -1,14 +1,13 @@
 #!/usr/bin/env python
 
-import itertools
-import sys
-
 import argparse
+import itertools
+
 import jax.numpy as jnp
 
-import environments.models.double_well as dw
-import environments.methods.euler_maruyama_batch as em
-from soc_agent import SOCAgent
+import molecules.models.double_well as dw
+import molecules.methods.euler_maruyama_batch as em
+from sderl.soc.soc_agent import SOCAgent
 
 # parser
 parser = argparse.ArgumentParser()
@@ -28,9 +27,6 @@ lrate = para[int(args.b) - 1][2]
 stop = -2.0
 max_n_steps = 10e+8
 max_n_ep = 10
-
-# folder
-folder = 'algorithms/soc/data'
 
 def main():
     """ Script for running soc agent with and SDE environment
@@ -54,7 +50,7 @@ def main():
                      stop=stop, gamma=1.0)
 
     # train agent
-    agent.train_vectorized(batch_size, max_n_ep, max_n_steps, folder)
+    agent.train_vectorized(batch_size, max_n_ep, max_n_steps)
 
 
 if __name__ == '__main__':

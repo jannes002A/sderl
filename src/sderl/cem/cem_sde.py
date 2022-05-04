@@ -1,24 +1,25 @@
-import torch as T
-import math, gym, os, sys
-
-import numpy as np
-import json
-from collections import deque
-import itertools
-
-#import pdb
-sys.path.append('../')
-import sde_gym
-import cem_agent
-
 import argparse
+from collections import deque
+import json
+import itertools
+import math
+import os
+
+import gym
+import numpy as np
+import torch as T
+
+import sde_gym
+import sderl.cem.cem_agent
+
+# set parser
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', default=1, help='pick a set of parameters (beta,lrates)')
 parser.add_argument('-n', default=16, help='network size')
 parser.add_argument('-s', default=15000, help='max number of trajectories')
 args = parser.parse_args()
 
-#---------------------set parameters------------------
+# set parameters
 num_break = int(args.s)
 #lbeta = [1.0,2.0,5.0,10.0]
 #beta = lbeta[int(args.b)-1]
@@ -26,7 +27,6 @@ beta = 2.0
 stop = -2.0
 net_size = int(args.n)
 device = T.device("cuda") if T.cuda.is_available() else T.device("cpu")
-
 
 
 def cem(gamma = 1.0, pop_size = 50, elite_frac = 0.2, sigma = 0.5):

@@ -1,28 +1,26 @@
-import torch as T
-import os, sys
+import argparse
+from collections import deque
+import json
+import itertools
+import os
 
+import torch as T
 import jax.numpy as jnp
 from jax import random
-import json
-from collections import deque
-import itertools
 
-import argparse
+import cem_agent_jax as cem_agent
+import sderl.utils.make_folder as mk
+import molecules.models.double_well as dw
+import molecules.methods.euler_maruyama as em
+
+# set parser
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', default=1, help = 'pick a set of parameters (beta,lrate)')
 parser.add_argument('-n', default = 128, help = 'network size')
 parser.add_argument('-s', default = 15000, help =' max number of trajectories')
 args = parser.parse_args()
 
-
-import cem_agent_jax as cem_agent
-sys.path.append('../../../')
-import algorithms.utils.make_folder as mk
-import environments.models.double_well as dw
-import environments.methods.euler_maruyama as em
-
-
-# --------------------set parameters--------------
+# set parameters
 num_break = int(args.s)
 lbetas = [2.0]
 lrates = [1e-3, 1e-4, 1e-5, 1e-6]

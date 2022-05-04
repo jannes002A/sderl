@@ -1,27 +1,26 @@
-from collections import deque
-from typing import Tuple
-import numpy as np
-import os
-import torch as T
-import sys
-import itertools
-import json
-
 import argparse
+from collections import deque
+import json
+import itertools
+import os
+from typing import Tuple
+
+import numpy as np
+import torch as T
+
+from sderl.ac.ac_agent import Agent
+import sderl.utils.make_folder as mk
+import molecules.models.double_well as dw
+import molecules.methods.euler_maruyama as em
+
+# set parameters
 parser = argparse.ArgumentParser()
 parser.add_argument('-b', default=1, help = 'pick a set of parameters (beta,lrate)')
 parser.add_argument('-n', default = 128, help = 'network size')
 parser.add_argument('-s', default = 15000, help =' max number of trajectories')
 args = parser.parse_args()
 
-from ac_agent import Agent
-sys.path.append('../../../')
-import algorithms.utils.make_folder as mk
-import environments.models.double_well as dw
-import environments.methods.euler_maruyama as em
-
-
-# --------------------set parameters--------------
+# set parameters
 num_break = int(args.s)
 lbetas = [2.0]
 lrates = [1e-3, 1e-4, 1e-5, 1e-6]
