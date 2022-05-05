@@ -1,25 +1,21 @@
+# directories 
+scripts/
+output/
+res/
+doc/
 
-**.idea
+# files
+*.idea
 *.log
-**.ipynb
-**.txt
-**.egg-info
-**/test_env
+*.out
+*.err
+*.ipynb
+*.ipynb_checkpoints
+*.txt
+*.egg-info
+*.sw[op]
+*.DS_Store
 **/__pycache__
 
-
-**/bak/**
-**/venv/**
-**/doc/**
-**/test/**
-/res/db
-/res/pics
-/res/results_HPC
-/ddpg/res/**
-
-**/src/*.ipynb
-**/.ipynb_checkpoints
-
-**/src/*.sw[op]
-
-.DS_Store
+# virtual environment
+venv/
