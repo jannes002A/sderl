@@ -19,3 +19,6 @@ doc/
 
 # virtual environment
 venv/
+
+# config file
+**/config.py
