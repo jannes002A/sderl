@@ -8,8 +8,8 @@ import torch as T
 import jax.numpy as jnp
 from jax import random
 
-import cem_agent_jax as cem_agent
-import sderl.utils.make_folder as mk
+from sderl.cem.cem_agent import CEMAgent
+from sderl.utils.make_folder import make_folder
 import molecules.models.double_well as dw
 import molecules.methods.euler_maruyama as em
 
@@ -37,7 +37,6 @@ maxtlen = 10e+8
 #pde_sol = np.load('../../utils/data_1d/u_pde_1d.npy')
 #x_pde = np.load('../../utils/data_1d/x_upde_1d.npy')
 device = T.device("cuda") if T.cuda.is_available() else T.device("cpu")
-folder = '../data'
 key = random.PRNGKey(42)
 
 
@@ -68,7 +67,7 @@ def calc_mean(lst):
 # TODO include maxlen for trajecory
 def cem(pop_size=50, elite_frac=0.2, sigma=0.5):
 
-    #folder_model, folder_result = mk.make_folder(folder)
+    #folder_model, folder_result = make_folder('cem')
     net_sizes = [1,30,1]
     n_elite = int(pop_size*elite_frac)
     rewards_window = deque(maxlen=100)
@@ -116,5 +115,5 @@ def cem(pop_size=50, elite_frac=0.2, sigma=0.5):
 if __name__ == '__main__':
     particle = dw.DoubleWell(stop=[1.0], dim=1, beta=lbetas[0])
     env = em.Euler_maru(particle, [-1.0], 0.01)
-    agent = cem_agent.Agent(env,h_size=30)
+    agent = CEMAgent(env,h_size=30)
     reward, avg_reward = cem(sigma=0.5)

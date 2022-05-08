@@ -11,7 +11,8 @@ import torch.nn as nn
 from torch.autograd import Variable
 import sklearn.preprocessing
 
-from sderl.soc.utils import make_folder
+from sderl.utils.make_folder import make_folder
+from sderl.utils.config import DATA_DIR_PATH
 from sderl.soc.networks import Actor
 
 class SOCAgent:
@@ -197,7 +198,7 @@ class SOCAgent:
         sampler = self.sampler
 
         # define folder to save results
-        folder_model, folder_result = make_folder('res/')
+        folder_model, folder_result = make_folder('soc')
 
         # define list to store results
         returns = []
@@ -338,7 +339,7 @@ class SOCAgent:
         sampler = self.sampler
 
         # define folder to save results
-        folder_model, folder_result = make_folder('res/')
+        folder_model, folder_result = make_folder('soc')
 
         # define list to store results
         returns = []
@@ -478,6 +479,12 @@ class SOCAgent:
                 with open(os.path.join(folder_result, self.log_name + '.json'), 'w') as file:
                     json.dump(tmp, file)
 
+
+    def get_hjb_solution(self):
+
+        # load hjb solution from data
+        self.pde_sol = np.load(os.path.join(DATA_DIR_PATH, 'hjb-pdf/u_pde_1d.npy'))
+        self.x_pde = np.load(os.path.join(DATA_DIR_PATH, 'hjb-pdf/x_upde_1d.npy'))
 
     def calculate_l2error(self):
         """Calculates the l2 error.

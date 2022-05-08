@@ -7,8 +7,7 @@ import numpy as np
 from sderl.ddpg.networks import Actor, Critic
 from sderl.ddpg.utils import Memory
 
-
-class DDPGagent:
+class DDPGAgent:
     """Call for Deep Deterministic policy gradient method
 
     The code follows the post from:

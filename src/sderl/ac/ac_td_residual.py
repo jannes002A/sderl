@@ -9,7 +9,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import torch as T
 
-from sderl.ac.ac_agent import Agent
+from sderl.ac.ac_agent import ActorCriticAgent
+from sderl.utils.make_folder import make_folder
 import molecules.models.double_well as dw
 import molecules.methods.euler_maruyama as em
 
@@ -37,40 +38,13 @@ maxtlen = 10e+8
 #pde_sol = np.load('../data/u_pde_1d.npy')
 #x_pde = np.load('../data/x_upde_1d.npy')
 device = T.device("cuda") if T.cuda.is_available() else T.device("cpu")
-folder = '../data'
 
-
-def make_folder(path:str) -> Tuple[str, str]:
-    """Create directory to save results and mode.
-
-    Parameters
-    ----------
-    path : str
-        main path where the directory should be located
-
-    Return:
-    ---------
-    folder_model : str
-        directory for the model to be saved at
-    folder_result : str
-        directory where the results are stored
-
-    """
-    if not os.path.exists(path):
-        os.mkdir(path)
-    folder_model = os.path.join(path, 'ddpg_model')
-    if not os.path.exists(folder_model):
-        os.mkdir(folder_model)
-    folder_result = os.path.join(path, 'ddpg_result')
-    if not os.path.exists(folder_result):
-        os.mkdir(folder_result)
-    return folder_model, folder_result
 
 
 def ac(num_episodes= 100, ckpt_freq=10):
     # TODO Refactor
     # get files to save results
-    folder_model, folder_result = make_folder(folder)
+    folder_model, folder_result = make_folder('ac')
     # define list to cache rewards
     rewards = []
     avg_rewards = []

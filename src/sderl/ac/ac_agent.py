@@ -23,7 +23,7 @@ class NNetwork(nn.Module):
         return x
 
 
-class Agent():
+class ActorCriticAgent():
     def __init__(self, alpha, beta, input_dims, gamma=0.99, n_actions = 2,
                  layer1_size=128, layer2_size=128, n_outputs=1):
         self.gamma = gamma

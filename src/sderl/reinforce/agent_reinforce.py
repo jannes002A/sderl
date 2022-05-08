@@ -9,11 +9,11 @@ import torch.optim as optim
 import torch.nn.utils as utils
 from torch.autograd import Variable
 
-from networks import Policy
-import algorithms.utils.make_folder as mk
+from sderl.reinforce.networks import Policy
+from sderl.utils.make_folder import make_folder
 
 
-class Reinforce:
+class ReinforceAgent(object):
     """
 
     Attributes
@@ -305,11 +305,11 @@ class Reinforce:
         # update parameters
         self.optimizer.step()
 
-    def train(self, folder, n_ep_max):
+    def train(self, max_n_ep):
         """ train policy following a REINFORCE type algorithm
         """
 
-        folder_model, folder_result = mk.make_folder(folder, 'reinforce')
+        folder_model, folder_result = make_folder('reinforce')
 
         # initialize lists
         rewards = []
@@ -317,7 +317,7 @@ class Reinforce:
         rewards_window = deque(maxlen=100)
         steps = []
 
-        for i_episode in range(n_ep_max):
+        for i_episode in range(max_n_ep):
 
             # sample trajectory
             self.generate_episode()
@@ -344,7 +344,7 @@ class Reinforce:
             # check if goal is reached
             success = 1 if (avg_rewards[-1] > self.stop) and (i_episode > 100) else 0
 
-            if success or i_episode + 1 == n_ep_max:
+            if success or i_episode + 1 == max_n_ep:
 
                 # log name
                 log_name = self.env.name + '_reinforce' + '_' + str(self.hidden_size) + '_' \
@@ -369,7 +369,7 @@ class Reinforce:
                 with open(os.path.join(folder_result, log_name + '.json'), 'w') as file:
                     json.dump(tmp, file)
 
-    def train_batch(self, folder, n_ep_max, n_traj):
+    def train_batch(self, max_n_ep, n_traj):
         """ train policy following a REINFORCE type algorithm using a batch of trajectories
         """
 

@@ -15,16 +15,16 @@ def get_parser():
     return parser
 
 def main():
-    """ Script for running soc agent with and SDE environment
+    """ Script for running soc agent with the SDE environment
     """
 
     # lists of parameters
-    l_sizes = [32]#, 64, 128, 256]               # network size
-    l_rates = [1e-2]#, 1e-3, 1e-4, 1e-5, 1e-6]   # learning rate
-    l_batch_sizes = [10**2, 10**3, 10**4]      # batch size
+    net_sizes = [32]#, 64, 128, 256]               # network size
+    lrates = [1e-2]#, 1e-3, 1e-4, 1e-5, 1e-6]     # learning rate
+    batch_sizes = [10**2, 10**3, 10**4]            # batch size
 
     # list of parameters combinations
-    para = list(itertools.product(l_sizes, l_rates, l_batch_sizes))
+    para = list(itertools.product(net_sizes, lrates, batch_sizes))
 
     # choose a combination
     args = get_parser().parse_args()
@@ -39,7 +39,6 @@ def main():
     d = 1
     beta = 2.0
     alpha_i = 1.0
-    stop = -4.0
     env = dw.DoubleWell(stop=[1.0], dim=d, beta=beta, alpha=[alpha_i])
 
     # initial position
@@ -49,6 +48,7 @@ def main():
     sampler = em.Euler_maru(env, start=xinit, K=batch_size, dt=0.01, key=0)
 
     # define SOC agent
+    stop = -4.0
     agent = SOCAgent(sampler, hidden_size=net_size, actor_learning_rate=lrate,
                      stop=stop, gamma=1.0)
 

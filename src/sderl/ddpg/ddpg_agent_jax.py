@@ -5,7 +5,7 @@ import optax
 from sderl.ddpg.networks_jax import Actor, Critic
 from sderl.ddpg.utils import Memory
 
-class DDPGagent:
+class DDPGAgent:
     """Call for Deep Deterministic policy gradient method
 
     Attributes

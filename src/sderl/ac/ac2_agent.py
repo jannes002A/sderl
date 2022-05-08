@@ -35,7 +35,7 @@ class NNetwork(nn.Module):
         #x = self.fc3(x)
         return x
 
-class Agent():
+class AC2Agent():
     def __init__(self, alpha, beta, input_dims, gamma=0.99, n_actions = 2,
                  hidden_dim =[128, 128], n_outputs=1):
         self.gamma = gamma

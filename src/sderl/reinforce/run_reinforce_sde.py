@@ -2,51 +2,42 @@
 
 import argparse
 import itertools
-import sys
 
 import jax.numpy as jnp
 import numpy as np
 import torch as T
 
-from agent_reinforce import Reinforce
-import environments.models.double_well as dw
-import environments.methods.euler_maruyama as em
+from sderl.reinforce.agent_reinforce import ReinforceAgent
+import molecules.models.double_well as dw
+import molecules.methods.euler_maruyama as em
 
-# parser
-parser = argparse.ArgumentParser()
-parser.add_argument('-b', default=1, help='pick a set of parameters in beta and lrate')
-parser.add_argument('-n', default=128, help='network size')
-parser.add_argument('-s', default=100, help='max number of trajectories')
-args = parser.parse_args()
-
-# system path
-sys.path.append('../../../')
-
-# set parameters
-n_ep_max = int(args.s)
-lbetas = [2.0]
-lrates = [1e-3, 1e-4, 1e-5, 1e-6]
-rngs = [21, 42, 84, 126, 168]
-nsize = [32, 64, 128, 256]
-para = list(itertools.product(lbetas, lrates, lrates, rngs, nsize))
-beta = para[int(args.b) - 1][0]
-lrate = para[int(args.b) - 1][1]
-rng = para[int(args.b) - 1][3]
-net_size = para[int(args.b) - 1][4]
-stop = -4.0
-maxtlen = 10e+8
-#pde_sol = np.load('../../utils/data_1d/u_pde_1d.npy')
-#x_pde = np.load('../../utils/data_1d/x_upde_1d.npy')
-folder = '../data'
-
+def get_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-b', default=0, type=int, help='pick a set of parameters')
+    return parser
 
 def main():
+    """ Script for running reinforce agent with the SDE environment
+    """
+
+    # lists of parameters
+    net_sizes = [32, 64, 128, 256]
+    lrates = [1e-3, 1e-4, 1e-5, 1e-6]
+    seeds = [21, 42, 84, 126, 168]
+
+    # list of parameters combinations
+    para = list(itertools.product(net_sizes, lrates, seeds))
+
+    # choose a combination
+    args = get_parser().parse_args()
+    net_size = para[int(args.b)][0]
+    lrate = para[int(args.b)][1]
+    seed = para[int(args.b)][2]
+
     # define environment
     d = 1
     alpha_i = 1.
     beta = 1.
-    stop = -2.
-    #env = dw.DoubleWell(stop=[1.0], dim=d, beta=lbetas[0], alpha=[alpha_i])
     env = dw.DoubleWell(stop=[1.0], dim=d, beta=beta, alpha=[alpha_i])
 
 
@@ -55,14 +46,16 @@ def main():
 
     # define sampling method
     dt = 0.01
-    sampler = em.Euler_maru(env, x0, dt=dt, key=1)
+    sampler = em.Euler_maru(env, x0, dt=dt, key=seed)
 
     # initialize reinforce object
-    #agent = Reinforce(sampler, hidden_size=net_size, alpha=lrate, gamma=1.0)
-    agent = Reinforce(sampler, hidden_size=256, alpha=lrate, gamma=1.0, stop=-2.)
+    stop = -2.
+    agent = ReinforceAgent(sampler, hidden_size=net_size, alpha=lrate, gamma=1.0, stop=stop)
 
     # train
-    agent.train(folder, n_ep_max)
+    max_n_ep = 10**1
+    max_n_steps = 10e+8
+    agent.train(max_n_ep)
 
 
 if __name__ == '__main__':

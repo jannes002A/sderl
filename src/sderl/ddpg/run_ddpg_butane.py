@@ -12,8 +12,8 @@ import numpy as np
 import sklearn.preprocessing
 import torch as T
 
-from sderl.ddpg import DDPGagent
-import sderl.utils.make_folder as mk
+from sderl.ddpg_agent import DDPGagent
+from sderl.utils.make_folder import make_folder
 import molecules.models.butan as butan
 import molecules.methods.euler_maruyama as em
 
@@ -38,7 +38,6 @@ net_size = para[int(args.b) - 1][4]
 stop = -4.0
 maxtlen = 10e+8
 device = T.device("cuda") if T.cuda.is_available() else T.device("cpu")
-folder = '../data'  # '/scratch/fu3760do/rl/ddpg/'
 
 
 def get_scaler(env):
@@ -108,7 +107,7 @@ def main_ddpg(env, batch_size=128):
 
     """
     # define folder to save results
-    folder_model, folder_result = mk.make_folder(folder)
+    folder_model, folder_result = make_folder('ddpg')
 
     # define list to store results
     rewards = []
