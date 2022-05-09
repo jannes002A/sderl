@@ -19,8 +19,8 @@ def main():
     """
 
     # lists of parameters
-    net_sizes = [32]#, 64, 128, 256]               # network size
-    lrates = [1e-2]#, 1e-3, 1e-4, 1e-5, 1e-6]     # learning rate
+    net_sizes = [32, 64, 128, 256]               # network size
+    lrates = [1e-1, 1e-2, 1e-3, 1e-4, 1e-5]     # learning rate
     batch_sizes = [10**2, 10**3, 10**4]            # batch size
 
     # list of parameters combinations
@@ -48,14 +48,14 @@ def main():
     sampler = em.Euler_maru(env, start=xinit, K=batch_size, dt=0.01, key=0)
 
     # define SOC agent
-    stop = -4.0
+    stop = -3.0
     agent = SOCAgent(sampler, hidden_size=net_size, actor_learning_rate=lrate,
-                     stop=stop, gamma=1.0)
+                     stop=stop, gamma=1.0, batch_size=batch_size)
 
     # train agent
     max_n_steps = 10**8
     max_n_ep = 10**3
-    agent.train_vectorized(batch_size, max_n_ep, max_n_steps)
+    agent.train_vectorized(max_n_ep, max_n_steps)
 
 
 if __name__ == '__main__':

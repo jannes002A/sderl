@@ -39,7 +39,7 @@ class SOCAgent:
     """
 
     def __init__(self, sampler, hidden_size=256, actor_learning_rate=1e-2,
-                 gamma=0.99, stop=-4.):
+                 gamma=0.99, stop=-4., batch_size=10**3):
         """Initialization of the SOC Agent
 
          Parameters
@@ -66,6 +66,7 @@ class SOCAgent:
         self.num_actions = 1 #env.action_space.shape[0]
         self.gamma = gamma
         self.stop = stop
+        self.batch_size = batch_size
 
         # actor network
         self.hidden_size = hidden_size
@@ -81,7 +82,7 @@ class SOCAgent:
 
         # define log name
         self.log_name = self.env.name + '_soc_' + str(self.hidden_size) + '_' \
-                      + str('{:1.8f}'.format(self.lrate)) + '_' + str(abs(self.stop))
+                + str('{:.0e}'.format(self.lrate)) + '_' + str('{:.0e}'.format(batch_size))
 
 
     def get_json_dict(self, returns, run_avg_returns, steps, l2_error, success, max_len):
@@ -171,7 +172,6 @@ class SOCAgent:
 
     def update(self):
         """ upate parameter for the actor network
-
         """
 
         # reset gradients
@@ -183,7 +183,7 @@ class SOCAgent:
         # update paramters
         self.actor_optimizer.step()
 
-    def train(self, batch_size=1000, max_n_ep=100):
+    def train(self, max_n_ep=100):
         """ train the actor nn by performing sgd of the associated soc problem. The trajectories
             are sampled one after the other
 
@@ -198,7 +198,7 @@ class SOCAgent:
         sampler = self.sampler
 
         # define folder to save results
-        folder_model, folder_result = make_folder('soc')
+        model_dir_path, result_dir_path = make_folder('soc')
 
         # define list to store results
         returns = []
@@ -212,7 +212,7 @@ class SOCAgent:
 
         # save initialization
         T.save(self.actor.state_dict(), \
-               os.path.join(folder_model, self.log_name + '_soc-actor-start.pkl'))
+               os.path.join(model_dir_path, self.log_name + '_soc-actor-start.pkl'))
 
         # iteration in the soc sgd
         for i_episode in range(max_n_ep):
@@ -312,18 +312,18 @@ class SOCAgent:
 
             if success or i_episode == max_n_ep or max_len:
                 T.save(self.actor.state_dict(), \
-                       os.path.join(folder_model, log_name + '_soc-actor-last.pkl'))
+                       os.path.join(model_dir_path, log_name + '_soc-actor-last.pkl'))
 
                 tmp = selg.get_json_dict(rewards, steps, l2_error, success, max_len)
 
-                with open(os.path.join(folder_result, self.log_name + '.json'), 'w') as file:
+                with open(os.path.join(result_dir_path, self.log_name + '.json'), 'w') as file:
                     json.dump(tmp, file)
 
                 return rewards, steps
 
         return rewards, steps
 
-    def train_vectorized(self, batch_size=1000, max_n_ep=100, max_n_steps='1e8'):
+    def train_vectorized(self, max_n_ep=100, max_n_steps='1e8'):
         """function for applying soc agent to an environment
 
         Parameters
@@ -339,7 +339,7 @@ class SOCAgent:
         sampler = self.sampler
 
         # define folder to save results
-        folder_model, folder_result = make_folder('soc')
+        model_dir_path, result_dir_path = make_folder('soc')
 
         # define list to store results
         returns = []
@@ -349,12 +349,15 @@ class SOCAgent:
         steps = []
         l2_error = []
 
+        # batch size
+        batch_size = self.batch_size
+
         # flag which determines if trajectory arrived in the target set under the prescribed time steps
         max_len = 0
 
         # save initialization
         T.save(self.actor.state_dict(), \
-               os.path.join(folder_model, self.log_name + '_soc-actor-start.pkl'))
+               os.path.join(model_dir_path, self.log_name + '_soc-actor-start.pkl'))
 
         # iteration in the soc sgd
         for i_episode in range(max_n_ep):
@@ -362,10 +365,12 @@ class SOCAgent:
             #print('episode {:d} starts!'.format(i_episode))
 
             # initialize phi and S
-            phi_t = T.zeros(batch_size)
-            phi_fht = T.empty(batch_size)
-            S_t = T.zeros(batch_size)
-            S_fht = T.empty(batch_size)
+            work_t = torch.zeros(batch_size)
+            work_fht = torch.empty(batch_size)
+            det_int_t = T.zeros(batch_size)
+            det_int_fht = T.empty(batch_size)
+            stoch_int_t = T.zeros(batch_size)
+            stoch_int_fht = T.empty(batch_size)
 
             # initialization
             states = sampler.reset()
@@ -392,17 +397,17 @@ class SOCAgent:
                 dbt_array = np.asarray(dbt)
                 dbt_tensor = T.tensor(dbt_array, requires_grad=False, dtype=T.float32)
 
-                # update running phi
-                actions_norm_tensor = T.linalg.norm(actions_tensor, axis=1)
-                phi_t = phi_t \
-                      + ((1 + 0.5 * env.beta * (actions_norm_tensor ** 2)) * sampler.dt).reshape(batch_size,)
+                # update work
+                work_t = work_t + sampler.dt
 
-                # update running discretized action
-                S_t = S_t \
-                    - np.sqrt(env.beta) * T.matmul(
-                        T.unsqueeze(actions_tensor, 1),
-                        T.unsqueeze(dbt_tensor, 2),
-                    ).reshape(batch_size,)
+                # update deterministic integral
+                det_int_t = det_int_t + (T.linalg.norm(actions_tensor, axis=1) ** 2) * sampler.dt
+
+                # update stochastic integral
+                stoch_int_t = stoch_int_t + T.matmul(
+                    torch.unsqueeze(actions_tensor, 1),
+                    torch.unsqueeze(dbt_tensor, 2),
+                ).reshape(batch_size,)
 
                 # get indices of trajectories which are new in the target set
                 idx = obs[1]
@@ -413,9 +418,10 @@ class SOCAgent:
                     idx_array = np.asarray(idx, dtype=np.compat.long)
                     idx_tensor = T.tensor(idx_array, dtype=T.long).to(self.device)
 
-                    # save phi and S loss for the arrived trajectorries
-                    phi_fht[idx_tensor] = phi_t.index_select(0, idx_tensor)
-                    S_fht[idx_tensor] = S_t.index_select(0, idx_tensor)
+                    # save integrals for the arrived trajectorries
+                    work_fht[idx_tensor] = work_t.index_select(0, idx_tensor)
+                    det_int_fht[idx_tensor] = det_int_t.index_select(0, idx_tensor)
+                    stoch_int_fht[idx_tensor] = stoch_int_t.index_select(0, idx_tensor)
 
 
                 # update episode reward
@@ -434,16 +440,13 @@ class SOCAgent:
                 step += 1
 
 
-            # compute terms in loss gradient
-            a = T.mean(phi_fht)
-            b = - T.mean(phi_fht.detach() * S_fht)
+            # compute cost functional (loss)
+            phi_fht = work_fht + 0.5 * det_int_fht
+            self.loss = np.mean(phi_fht.detach().numpy())
+            self.var_loss = np.var(phi_fht.detach().numpy())
 
-            # compute loss and variance of loss
-            self.loss = a.detach().numpy()
-            self.var_loss = T.var(phi_fht).detach().numpy()
-
-            # compute ipa loss
-            self.eff_loss = a + b
+            # compute effective loss
+            self.eff_loss = torch.mean(0.5 * det_int_fht + phi_fht.detach() * stoch_int_fht)
 
             # update  returns
             returns.append(np.mean(episode_return).item())
@@ -472,11 +475,11 @@ class SOCAgent:
 
             if success or i_episode + 1 == max_n_ep or max_len:
                 T.save(self.actor.state_dict(), \
-                       os.path.join(folder_model, self.log_name + '_soc-actor-last.pkl'))
+                       os.path.join(model_dir_path, self.log_name + '_soc-actor-last.pkl'))
 
                 tmp = self.get_json_dict(returns, run_avg_returns, steps, l2_error, success, max_len)
 
-                with open(os.path.join(folder_result, self.log_name + '.json'), 'w') as file:
+                with open(os.path.join(result_dir_path, self.log_name + '.json'), 'w') as file:
                     json.dump(tmp, file)
 
 
