@@ -6,7 +6,7 @@ import itertools
 import jax.numpy as jnp
 
 import molecules.models.double_well as dw
-import molecules.methods.euler_maruyama as em
+import molecules.methods.euler_maruyama_batch as em
 from sderl.soc.soc_agent import SOCAgent
 
 def get_parser():
@@ -19,9 +19,9 @@ def main():
     """
 
     # lists of parameters
-    net_sizes = [32, 64, 128, 256]               # network size
+    net_sizes = [32, 64, 128, 256]      # network size
     lrates = [1e-2, 1e-3, 1e-4, 1e-5]     # learning rate
-    batch_sizes = [10**2, 10**3, 10**4]            # batch size
+    batch_sizes = [10**2, 10**3, 10**4]     # batch size
 
     # list of parameters combinations
     para = list(itertools.product(net_sizes, lrates, batch_sizes))
@@ -42,10 +42,10 @@ def main():
     env = dw.DoubleWell(stop=[1.0], dim=d, beta=beta, alpha=[alpha_i])
 
     # initial position
-    xinit = -1.0 * jnp.ones(d)
+    xinit = -1.0 * jnp.ones((batch_size, d))
 
     # set environment
-    sampler = em.Euler_maru(env, start=xinit, dt=0.01, key=1)
+    sampler = em.EulerMaru(env, start=xinit, K=batch_size, dt=0.01, seed=0)
 
     # define SOC agent
     stop = - 3.0
@@ -55,7 +55,7 @@ def main():
     # train agent
     max_n_steps = 10**8
     max_n_ep = 1000
-    agent.train(max_n_ep, max_n_steps)
+    agent.train_batch(max_n_ep, max_n_steps)
 
 
 if __name__ == '__main__':

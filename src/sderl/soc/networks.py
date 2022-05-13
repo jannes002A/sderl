@@ -4,8 +4,9 @@ import torch.nn.functional as F
 import torch.autograd
 from torch.autograd import Variable
 
-class Actor(nn.Module):
-    def __init__(self, input_size, hidden_size, output_size):
+class FeedForwardNN(nn.Module):
+    def __init__(self, input_size, hidden_size, output_size,
+                 n_layers=2, activation='tanh', seed=0):
         """ Initialization of the Actor network
 
         Parameters
@@ -16,30 +17,70 @@ class Actor(nn.Module):
             size of the hidden layer
         output_size : int
             size of the output layer
-
+        n_layers : int, optional
+            number of layers
+        activation : str, optional
+            type of activation function
+        seed : int, optional
+            seed
         """
-        super(Actor, self).__init__()
+        super(FeedForwardNN, self).__init__()
 
-        # set three network layers
-        self.linear1 = nn.Linear(input_size, hidden_size)
-        self.linear2 = nn.Linear(hidden_size, hidden_size)
-        self.linear3 = nn.Linear(hidden_size, output_size)
+        # save number of layers
+        self.n_layers = n_layers
+
+        # set network layers
+        for i in range(n_layers):
+
+            # set layer input and output sizes
+            if i == 0:
+                input_layer_size = input_size
+                output_layer_size = hidden_size
+            elif i < n_layers -1:
+                input_layer_size = hidden_size
+                output_layer_size = hidden_size
+            else:
+                input_layer_size = hidden_size
+                output_layer_size = output_size
+
+            # define linear layers
+            setattr(
+                self,
+                'linear{:d}'.format(i+1),
+                nn.Linear(input_layer_size, output_layer_size, bias=True),
+            )
+
+        # set activation function
+        if activation == 'relu':
+            self.activation = nn.ReLU()
+        elif activation == 'tanh':
+            self.activation = nn.Tanh()
+        elif activation == 'sigmoid':
+            self.activation = nn.Sigmoid()
 
     def forward(self, state):
         """ Evaluation of the network at the given state
 
-         Parameters
-         ----------
-         state : tensor
-             current position of the dynamical system
+        Parameters
+        ----------
+        state : tensor
+            current position of the dynamical system
 
-         Returns
-         ---------
-         tensor
-             current output of the actor network
-         """
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = torch.tanh(self.linear3(x))
+        Returns
+        -------
+        tensor
+            current output of the actor network
+        """
+        x = state
+
+        for i in range(self.n_layers):
+
+            # linear layer
+            linear = getattr(self, 'linear{:d}'.format(i+1))
+            x = linear(x)
+
+            # activation function
+            if i != self.n_layers -1:
+                x = self.activation(x)
 
         return x

@@ -13,7 +13,7 @@ import sklearn.preprocessing
 
 from sderl.utils.make_folder import make_folder
 from sderl.utils.config import DATA_DIR_PATH
-from sderl.soc.networks import Actor
+from sderl.soc.networks import FeedForwardNN
 
 class SOCAgent:
     """ Call for SOC problem with agent
@@ -58,20 +58,21 @@ class SOCAgent:
         self.sampler = sampler
 
         # environment
-        #self.env = sampler.potential
         self.env = sampler.env
 
         # parameters
-        self.num_states = 1 #env.observation_space_shape
-        self.num_actions = 1 #env.action_space.shape[0]
+        #self.d_state_space = self.env.observation_space.shape[0]
+        self.d_state_space = self.env.dim[0]
+        #self.d_action_space = self.env.action_space.shape[0]
+        self.d_action_space = self.env.dim[0]
         self.gamma = gamma
         self.stop = stop
         self.batch_size = batch_size
 
         # actor network
         self.hidden_size = hidden_size
-        self.actor = Actor(self.num_states, hidden_size, self.num_actions)
-        self.actor_target = Actor(self.num_states, hidden_size, self.num_actions)
+        self.actor = FeedForwardNN(self.d_state_space, hidden_size, self.d_action_space,
+                                   n_layers=3, activation='tanh')
 
         # initialize actor optimizer
         self.lrate = actor_learning_rate
@@ -183,159 +184,16 @@ class SOCAgent:
         # update paramters
         self.actor_optimizer.step()
 
-    def train(self, max_n_ep=100):
+    def train(self, max_n_ep=100, max_n_steps='1e8'):
         """ train the actor nn by performing sgd of the associated soc problem. The trajectories
             are sampled one after the other
 
         Parameters
         ----------
-        batch_size : int
-            number of trajectories to be sampled before an update step is done
 
         """
         # get environment and sampler
         env = self.env
-        sampler = self.sampler
-
-        # define folder to save results
-        model_dir_path, result_dir_path = make_folder('soc')
-
-        # define list to store results
-        returns = []
-        run_window_returns = deque(maxlen=100)
-        run_avg_returns = []
-        steps = []
-        l2_error = []
-
-        # flag which determines if trajectory arrived in the target set under the prescribed time steps
-        max_len = 0
-
-        # save initialization
-        T.save(self.actor.state_dict(), \
-               os.path.join(model_dir_path, self.log_name + '_soc-actor-start.pkl'))
-
-        # iteration in the soc sgd
-        for i_episode in range(max_n_ep):
-
-            #print('episode {:d} starts!'.format(i_episode))
-
-            # initialize phi and S
-            phi_fht = T.zeros(batch_size)
-            S_fht = T.zeros(batch_size)
-
-            # sample trajectory
-            for i in range(batch_size):
-
-                #print('trajectory {:d} starts!'.format(i))
-
-                # initialization
-                state = sampler.reset()
-
-                # noise.reset()
-                episode_reward = 0
-                done = False
-                step = 0
-
-                # sample trajectories
-                while not done:
-
-                    # get action
-                    action_tensor = self.get_action(state, do_scale=True)
-                    action = action_tensor.detach().numpy()
-
-                    # get new state
-                    new_state, reward, done, obs = sampler.step(action.item())
-                    dbt = obs[0]
-
-                    # tensorize
-                    state_tensor = T.tensor(state.item(), dtype=T.float32)
-                    dbt_tensor = T.tensor(dbt.item(), dtype=T.float32)
-
-                    # update running phi
-                    action_norm_tensor = T.linalg.norm(action_tensor)
-                    phi_fht[i] = phi_fht[i] + 0.5 * env.beta * (action_norm_tensor ** 2) * env.dt
-
-                    # update running discretized action
-                    S_fht[i] = S_fht[i] - np.sqrt(env.beta) * action_tensor * dbt_tensor
-
-                    #print(phi_fht[i])
-
-                    # update episode reward
-                    episode_reward += reward
-
-                    # if trajectory is too long break
-                    if step >= max_step_len:
-                        max_len = 1
-                        break
-
-                    # update step and state
-                    state = new_state
-                    step += 1
-
-
-                # index
-                idx_tensor = T.tensor(i, dtype=T.long).to(self.device)
-
-                # store trajectories
-                rewards.append(episode_reward.item())
-                steps.append(step)
-                #l2_error.append(calculate_l2error())
-
-            # print reward before update
-            msg = 'it.: {:d}, avg-reward: {:2.3f}, var(avg-reward): {:2.3e}'.format(
-                i_episode,
-                np.mean(rewards),
-                np.var(rewards),
-            )
-            print(msg)
-
-            # compute terms in loss gradient
-            a = T.mean(phi_fht)
-            b = - T.mean(phi_fht.detach() * S_fht)
-
-            # compute loss and variance of loss
-            self.loss = a.detach().numpy()
-            self.var_loss = T.var(phi_fht)
-
-            # compute ipa loss
-            self.eff_loss = a + b
-
-            # update networks
-            self.update()
-
-            # check if goal is reached 
-            #if avg_rewards[-1] > stop:
-            #    sucess = True
-            #else:
-            #    success = False
-            success = False
-
-            if success or i_episode == max_n_ep or max_len:
-                T.save(self.actor.state_dict(), \
-                       os.path.join(model_dir_path, log_name + '_soc-actor-last.pkl'))
-
-                tmp = selg.get_json_dict(rewards, steps, l2_error, success, max_len)
-
-                with open(os.path.join(result_dir_path, self.log_name + '.json'), 'w') as file:
-                    json.dump(tmp, file)
-
-                return rewards, steps
-
-        return rewards, steps
-
-    def train_vectorized(self, max_n_ep=100, max_n_steps='1e8'):
-        """function for applying soc agent to an environment
-
-        Parameters
-        ----------
-        batch_size : int
-            number of trajectories to be sampled before an update step is done
-
-        """
-        # get environment
-        env = self.env
-
-        # get sampler
         sampler = self.sampler
 
         # define folder to save results
@@ -364,7 +222,165 @@ class SOCAgent:
 
             #print('episode {:d} starts!'.format(i_episode))
 
-            # initialize phi and S
+            # initialize episodic rewards
+            episode_rewards = np.zeros(batch_size)
+
+            # initialize det and stoch integrals
+            work_fht = T.zeros(batch_size)
+            det_int_fht = T.zeros(batch_size)
+            stoch_int_fht = T.zeros(batch_size)
+
+            # sample trajectory
+            for i in range(batch_size):
+
+                print('trajectory {:d} starts!'.format(i))
+
+                # initialization
+                state = sampler.reset()
+                state_array = np.asarray(state)
+                state_tensor = T.tensor(state_array, dtype=T.float32)
+
+                # noise.reset()
+                episode_reward = 0
+                done = False
+                step = 0
+
+                # sample trajectories
+                while not done:
+
+                    # get action
+                    action_tensor = self.get_action(state_tensor, do_scale=False)
+                    action_array = action_tensor.detach().numpy()
+                    action = jnp.array(action_array, dtype=jnp.float32)
+
+                    # get new state
+                    new_state, reward, done, obs = sampler.step(action)
+
+                    # get used Brownian increment and tensorize it
+                    dbt = obs[0]
+                    dbt_array = np.asarray(dbt)
+                    dbt_tensor = T.tensor(dbt_array, requires_grad=False, dtype=T.float32)
+
+                    # update work
+                    work_fht[i] = work_fht[i] + sampler.dt
+
+                    # update deterministic integral
+                    det_int_fht[i] = det_int_fht[i] \
+                                   + (T.linalg.norm(action_tensor) ** 2) * sampler.dt
+
+                    # update stochastic integral
+                    stoch_int_fht[i] = stoch_int_fht[i] + T.matmul(
+                        action_tensor,
+                        dbt_tensor,
+                    )
+
+                    # update episode reward
+                    episode_reward += reward
+
+                    # if trajectory is too long break
+                    if step >= max_n_steps:
+                        max_len = 1
+                        break
+
+                    # update step and state
+                    state = new_state
+                    states_array = np.asarray(state)
+                    states_tensor = T.tensor(state_array, dtype=T.float32)
+
+                    # update step
+                    step += 1
+
+                # index
+                idx_tensor = T.tensor(i, dtype=T.long).to(self.device)
+
+                # store trajectories
+                episode_rewards[i] = episode_reward.item()
+
+                #steps.append(step)
+                #l2_error.append(calculate_l2error())
+
+            # print reward before update
+            msg = 'it.: {:d}, return: {:2.3f}, var(return): {:2.3e}'.format(
+                i_episode,
+                np.mean(episode_rewards),
+                np.var(episode_rewards),
+            )
+            print(msg)
+
+            # compute cost functional (loss)
+            phi_fht = work_fht + 0.5 * det_int_fht
+            self.loss = np.mean(phi_fht.detach().numpy())
+            self.var_loss = np.var(phi_fht.detach().numpy())
+
+            # compute effective loss
+            self.eff_loss = torch.mean(0.5 * det_int_fht + phi_fht.detach() * stoch_int_fht)
+
+            # update networks
+            self.update()
+
+            # update statistics
+            returns.append(np.mean(episode_rewards).item())
+            run_window_returns.append(np.mean(episode_rewards))
+            run_avg_returns.append(np.mean(run_window_returns).item())
+
+            # check if goal is reached 
+            if run_avg_returns[-1] > self.stop and i_episode > run_window_len:
+                success = True
+            else:
+                success = False
+
+            if success or i_episode + 1 == max_n_ep or max_len:
+                T.save(self.actor.state_dict(), \
+                       os.path.join(model_dir_path, self.log_name + '_soc-actor-last.pkl'))
+
+                tmp = self.get_json_dict(returns, run_avg_returns, steps, l2_error, success, max_len)
+
+                with open(os.path.join(result_dir_path, self.log_name + '.json'), 'w') as file:
+                    json.dump(tmp, file)
+
+
+    def train_batch(self, max_n_ep=100, max_n_steps='1e8'):
+        """function for applying soc agent to an environment
+
+        Parameters
+        ----------
+        batch_size : int
+            number of trajectories to be sampled before an update step is done
+
+        """
+        # get environment
+        env = self.env
+
+        # get sampler
+        sampler = self.sampler
+
+        # define folder to save results
+        model_dir_path, result_dir_path = make_folder('soc')
+
+        # define list to store results
+        returns = []
+        run_window_len = 10
+        run_window_returns = deque(maxlen=run_window_len)
+        run_avg_returns = []
+        steps = []
+        l2_error = []
+
+        # batch size
+        batch_size = self.batch_size
+
+        # flag which determines if trajectory arrived in the target set under the prescribed time steps
+        max_len = 0
+
+        # save initialization
+        T.save(self.actor.state_dict(), \
+               os.path.join(model_dir_path, self.log_name + '_soc-actor-start.pkl'))
+
+        # iteration in the soc sgd
+        for i_episode in range(max_n_ep):
+
+            #print('episode {:d} starts!'.format(i_episode))
+
+            # initialize det and stoch integrals
             work_t = torch.zeros(batch_size)
             work_fht = torch.empty(batch_size)
             det_int_t = T.zeros(batch_size)
@@ -392,7 +408,7 @@ class SOCAgent:
                 # get new state
                 new_states, rewards, done, obs = sampler.step(actions)
 
-                # get usde Brownian increment and tensorize it
+                # get used Brownian increment and tensorize it
                 dbt = obs[0]
                 dbt_array = np.asarray(dbt)
                 dbt_tensor = T.tensor(dbt_array, requires_grad=False, dtype=T.float32)
@@ -437,6 +453,7 @@ class SOCAgent:
                 states_array = np.asarray(states)
                 states_tensor = T.tensor(states_array, dtype=T.float32)
 
+                # update step
                 step += 1
 
 
@@ -449,18 +466,17 @@ class SOCAgent:
             self.eff_loss = torch.mean(0.5 * det_int_fht + phi_fht.detach() * stoch_int_fht)
 
             # update  returns
-            returns.append(np.mean(episode_return).item())
-            run_window_returns.append(np.mean(episode_return))
+            returns.append(self.loss.item())
+            run_window_returns.append(self.loss)
             run_avg_returns.append(np.mean(run_window_returns).item())
 
             # print reward before update
-            msg = 'it.: {:d}, loss: {:2.3f}, var(loss): {:2.3e}, ' \
-                  'avg-reward: {:2.3f}, var(avg-reward): {:2.3e}'.format(
+            msg = 'it.: {:d}, return: {:2.3f}, var(return): {:2.3e}, ' \
+                  'avg-return: {:2.3f}'.format(
                 i_episode,
                 self.loss,
                 self.var_loss,
-                np.mean(episode_return),
-                np.var(episode_return),
+                run_avg_returns[-1],
             )
             print(msg)
 
@@ -469,7 +485,7 @@ class SOCAgent:
 
             # check if goal is reached 
             if run_avg_returns[-1] > self.stop and i_episode > run_window_len:
-                sucess = True
+                success = True
             else:
                 success = False
 
