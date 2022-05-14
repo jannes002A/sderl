@@ -8,11 +8,10 @@ from sderl.ddpg.networks import Actor, Critic
 from sderl.ddpg.utils import Memory
 
 class DDPGAgent:
-    """Call for Deep Deterministic policy gradient method
+    """ Call for Deep Deterministic policy gradient method
 
     The code follows the post from:
     https://towardsdatascience.com/deep-deterministic-policy-gradients-explained-2d94655a9b7b
-
 
     Attributes
     ----------
@@ -41,7 +40,7 @@ class DDPGAgent:
     """
 
     def __init__(self, sampler, hidden_size=256, actor_learning_rate=1e-4, critic_learning_rate=1e-3,
-                 gamma=0.99, tau=1e-2, max_memory_size=50000):
+                 gamma=0.99, tau=1e-2, max_memory_size=50000, stop=0.0):
         """Initialization of the DDPG Agent
 
          Parameters
@@ -69,14 +68,17 @@ class DDPGAgent:
 
         # euler marujama sampler
         self.sampler = sampler
+        self.seed = sampler.seed
 
         # parameters
         self.num_states = sampler.observation_space_dim
         self.num_actions = sampler.action_space_dim
         self.gamma = gamma
         self.tau = tau
+        self.stop = stop
 
         # networks
+        self.hidden_size = hidden_size
         self.actor = Actor(self.num_states, hidden_size, self.num_actions)
         self.actor_target = Actor(self.num_states, hidden_size, self.num_actions)
         self.critic = Critic(self.num_states + self.num_actions, hidden_size, self.num_actions)
@@ -92,8 +94,17 @@ class DDPGAgent:
         # initialize memory and optimizers
         self.memory = Memory(max_memory_size)
         self.critic_criterion = nn.MSELoss()
+        self.lrate_a = actor_learning_rate
+        self.lrate_c = critic_learning_rate
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_learning_rate)
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_learning_rate)
+
+        # define logging name
+        self.log_name = self.env.name + '_ddpg_' + str(self.seed) + '_' + str(hidden_size) \
+                 + '_' + str('{:1.8f}'.format(actor_learning_rate)) \
+                 + '_' + str('{:1.8f}'.format(critic_learning_rate)) \
+                 + '_' + str(abs(stop))
+
 
     def get_action(self, state):
         """ propagate state through the actor network
@@ -127,10 +138,10 @@ class DDPGAgent:
         states, actions, rewards, next_states, _ = self.memory.sample(batch_size)
 
         # make them float
-        states = torch.FloatTensor(states)
-        actions = torch.FloatTensor(actions)
-        rewards = torch.FloatTensor(rewards)
-        next_states = torch.FloatTensor(next_states)
+        states = torch.FloatTensor(np.array(states))
+        actions = torch.FloatTensor(np.array(actions))
+        rewards = torch.FloatTensor(np.array(rewards))
+        next_states = torch.FloatTensor(np.array(next_states))
 
         # Critic loss
 

@@ -7,7 +7,7 @@ from torch.autograd import Variable
 
 class Critic(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        """Initialization of the Critic network
+        """ Initialization of the Critic network
 
         Parameters
         ----------
@@ -26,7 +26,7 @@ class Critic(nn.Module):
         self.linear3 = nn.Linear(hidden_size, output_size)
 
     def forward(self, state, action):
-        """Initialization of the Critic network
+        """ Evaluation of the Critic network. Forward pass.
 
         Parameters
         ----------
@@ -50,7 +50,7 @@ class Critic(nn.Module):
 
 class Actor(nn.Module):
     def __init__(self, input_size, hidden_size, output_size):
-        """Initialization of the Actor network
+        """ Initialization of the Actor network
 
         Parameters
         ----------
@@ -63,13 +63,17 @@ class Actor(nn.Module):
 
         """
         super(Actor, self).__init__()
+
         # set three network layers
         self.linear1 = nn.Linear(input_size, hidden_size)
         self.linear2 = nn.Linear(hidden_size, hidden_size)
         self.linear3 = nn.Linear(hidden_size, output_size)
-        
+
+        # set activation function
+        self.activation = nn.Tanh()
+
     def forward(self, state):
-        """Initialization of the Critic network
+        """ Evaluation of the Actor network. Forward pass.
 
          Parameters
          ----------
@@ -81,8 +85,8 @@ class Actor(nn.Module):
          float :
              current output of the actor network
          """
-        x = F.relu(self.linear1(state))
-        x = F.relu(self.linear2(x))
-        x = torch.tanh(self.linear3(x))
+        x = self.activation(self.linear1(state))
+        x = self.activation(self.linear2(x))
+        x = self.linear3(x)
 
         return x

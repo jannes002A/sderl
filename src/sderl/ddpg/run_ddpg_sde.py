@@ -13,7 +13,6 @@ import sklearn.preprocessing
 import torch as T
 
 from sderl.ddpg.ddpg_agent import DDPGAgent
-#from sderl.ddpg.ddpg_agent_jax import DDPGAgent
 from sderl.utils.make_folder import make_folder
 import molecules.models.double_well as dw
 import molecules.methods.euler_maruyama as em
@@ -41,7 +40,6 @@ def main():
     lrate_a = para[int(args.b)][1]
     lrate_c = para[int(args.b)][2]
     seed = para[int(args.b)][3]
-    num_break = int(args.s)
 
     #pde_sol = np.load('../../utils/data_1d/u_pde_1d.npy')
     #x_pde = np.load('../../utils/data_1d/x_upde_1d.npy')
@@ -49,7 +47,7 @@ def main():
     # set environment 
     d = 1
     alpha_i = 1.
-    beta = 1.
+    beta = 2.
     env = dw.DoubleWell(stop=[1.0], dim=d, beta=beta, alpha=[alpha_i])
 
     # initial position
@@ -57,19 +55,19 @@ def main():
 
     # set sampler
     dt = 0.01
-    sampler = em.Euler_maru(env, x0, dt=dt)
+    sampler = em.EulerMaru(env, x0, dt=dt, seed=seed)
 
     # define DDPG agent
+    stop = -4.0
     agent = DDPGAgent(sampler, hidden_size=net_size, actor_learning_rate=lrate_a, \
-                      critic_learning_rate=lrate_c, gamma=1.0)
+                      critic_learning_rate=lrate_c, gamma=1.0, stop=stop)
 
-    #stop = -4.0
-    #maxtlen = 10e+8
     # get scaler
     scaler = get_scaler(env)
 
     # run main loop
-    rewards, avg_rewards, steps = main_ddpg(agent)
+    max_n_traj = int(args.s)
+    main_ddpg(agent, max_n_traj, scaler)
 
 def get_scaler(env):
     """scale state variable; easier for NN learning
@@ -90,7 +88,7 @@ def get_scaler(env):
     return scaler
 
 
-def scale_state(state):
+def scale_state(scaler, state):
     """function for applying scaler to state
 
     Parameters
@@ -117,7 +115,7 @@ def calculate_l2error():
     return np.sum(l2_error)
 
 
-def main_ddpg(agent, batch_size=128):
+def main_ddpg(agent, max_n_traj, scaler, batch_size=128, max_n_steps=10**8):
     """function for applying ddpg to an environment
 
     Parameters
@@ -126,8 +124,9 @@ def main_ddpg(agent, batch_size=128):
         number of trajectories to be sampled before an update step was done
 
     """
-    # get env
+    # get environment and sampler
     env = agent.env
+    sampler = agent.sampler
 
     # define folder to save results
     folder_model, folder_result = make_folder('ddpg')
@@ -140,33 +139,37 @@ def main_ddpg(agent, batch_size=128):
     l2_error = []
     max_len = 0
 
-    # define logging name
-    log_name = env.name + '_ddpg_' + str(agent.seed) + '_' + str(agent.net_size) + '_' + \
-            str('{:1.8f}'.format(agent.lrate_a)) + str('_{:1.8f}'.format(agent.lrate_c)) + \
-            '_' + str(abs(agent.stop))
 
     # save initialization
-    #T.save(agent.actor.state_dict(), \
-    #       os.path.join(folder_model, log_name + '_ddpg-actor-start.pkl'))
-    #T.save(agent.critic.state_dict(), \
-    #       os.path.join(folder_model, log_name + '_ddpg-critic-start.pkl'))
+    T.save(agent.actor.state_dict(), \
+           os.path.join(folder_model, agent.log_name + '_ddpg-actor-start.pkl'))
+    T.save(agent.critic.state_dict(), \
+           os.path.join(folder_model, agent.log_name + '_ddpg-critic-start.pkl'))
 
-    for i_episode in range(num_break+1):
+    for i_episode in range(max_n_traj+1):
+
         # initialization
-        state = env.reset()
+        state = sampler.reset()
+
         # noise.reset()
         episode_reward = 0
         done = False
         step = 0
 
+
         # sample trajectories
         while not done:
+
+            # update time step
             step += 1
+
             # get action
-            action = agent.get_action(scale_state(state))
+            action = agent.get_action(scale_state(scaler, state))
             # action = noise.get_action(action, step)
+
             # get new state
-            new_state, reward, done, _ = env.step(action)
+            new_state, reward, done, _ = sampler.step(action)
+
             # fill memory
             agent.memory.push(np.array(state), action, reward, \
                               np.array(new_state), done)
@@ -179,7 +182,7 @@ def main_ddpg(agent, batch_size=128):
             episode_reward += reward
 
             # if trajectory is too long break
-            if step >= maxtlen:
+            if step >= max_n_steps:
                 max_len = 1
                 break
 
@@ -189,36 +192,40 @@ def main_ddpg(agent, batch_size=128):
         avg_rewards.append(np.mean(rewards_window))
         steps.append(step)
         #l2_error.append(calculate_l2error())
-        '''
-        # if goal reached save everything
-        sucess = 1 if (avg_rewards[-1] > stop) and (i_episode > 100) else 0
-        if sucess or i_episode == num_break or max_len:
-            T.save(agent.actor.state_dict(), \
-                   os.path.join(folder_model, log_name + '_ddpg-actor-last.pkl'))
-            T.save(agent.critic.state_dict(), \
-                   os.path.join(folder_model, log_name + '_ddpg-critic-last.pkl'))
-            # redefine tmp such that it has a similar structure for all algorithms!
-            tmp = {'name': env.name,
-                    'algo': 'ddpg',
-                    'beta': env.beta,
-                    'stop': stop,
-                    'rng': env.seed,
-                    'net_size': net_size,
-                    'lrate_actor': lrate_a,
-                    'lrate_critic': lrate_c,
-                    'sucess': sucess,
-                    'max_len': max_len,
-                    'reward': rewards,
-                    'avg_reward': avg_rewards,
-                    'step': steps,
-                    'l2_error': l2_error}
 
-            with open(os.path.join(folder_result, log_name + '.json'), 'w') as file:
+        print('ep: {:d}, return: {:2.3f}, run avg return: {:2.3f}'
+              ''.format(i_episode, rewards[-1], avg_rewards[-1]))
+
+
+        # if goal reached save everything
+        success = 1 if (avg_rewards[-1] > agent.stop) and (i_episode > 100) else 0
+
+        if success or i_episode == max_n_traj or max_len:
+            T.save(agent.actor.state_dict(), \
+                   os.path.join(folder_model, agent.log_name + '_ddpg-actor-last.pkl'))
+            T.save(agent.critic.state_dict(), \
+                   os.path.join(folder_model, agent.log_name + '_ddpg-critic-last.pkl'))
+            # redefine tmp such that it has a similar structure for all algorithms!
+            tmp = {
+                'name': env.name,
+                'algo': 'ddpg',
+                'beta': env.beta,
+                'stop': agent.stop,
+                'rng': sampler.seed,
+                'net_size': agent.hidden_size,
+                'lrate_actor': agent.lrate_a,
+                'lrate_critic': agent.lrate_c,
+                'success': success,
+                'max_len': max_len,
+                'reward': rewards,
+                'avg_reward': avg_rewards,
+                'step': steps,
+                'l2_error': l2_error,
+            }
+
+            with open(os.path.join(folder_result, agent.log_name + '.json'), 'w') as file:
                 json.dump(tmp, file)
 
-            return rewards, avg_rewards, steps
-        '''
-    return rewards, avg_rewards, steps
 
 
 if __name__ == '__main__':
