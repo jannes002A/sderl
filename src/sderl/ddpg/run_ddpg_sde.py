@@ -20,19 +20,20 @@ import molecules.methods.euler_maruyama as em
 def get_parser():
     parser = argparse.ArgumentParser()
     parser.add_argument('-b', default=0, type=int, help='pick a set of parameters')
-    parser.add_argument('-s', default=15000, help='max number of trajectories')
     return parser
 
 def main():
     """ Script for running the DDPG agent with the SDE environment with the double well potential
     """
     # lists of parameters
-    net_sizes = [32, 64, 128, 256]
-    lrates = [1e-3, 1e-4, 1e-5, 1e-6]
-    seeds = [21, 42, 84, 126, 168]
+    net_sizes = [32, 64, 128]
+    lrates = [1e-2, 1e-3, 1e-4]
+    seeds = [1, 2, 3]
+    max_n_trajs = [10**3, 10**4, 10**5]
+    batch_sizes = [10**2, 10**3]
 
     # list of parameters combinations
-    para = list(itertools.product(net_sizes, lrates, lrates, seeds))
+    para = list(itertools.product(net_sizes, lrates, lrates, seeds, max_n_trajs, batch_sizes))
 
     # choose a combination
     args = get_parser().parse_args()
@@ -40,6 +41,8 @@ def main():
     lrate_a = para[int(args.b)][1]
     lrate_c = para[int(args.b)][2]
     seed = para[int(args.b)][3]
+    max_n_traj = para[int(args.b)][4]
+    batch_size = para[int(args.b)][5]
 
     #pde_sol = np.load('../../utils/data_1d/u_pde_1d.npy')
     #x_pde = np.load('../../utils/data_1d/x_upde_1d.npy')
@@ -60,14 +63,14 @@ def main():
     # define DDPG agent
     stop = -4.0
     agent = DDPGAgent(sampler, hidden_size=net_size, actor_learning_rate=lrate_a, \
-                      critic_learning_rate=lrate_c, gamma=1.0, stop=stop)
+                      critic_learning_rate=lrate_c, gamma=1.0, stop=stop, max_n_traj=max_n_traj,
+                      batch_size=batch_size)
 
     # get scaler
     scaler = get_scaler(env)
 
     # run main loop
-    max_n_traj = int(args.s)
-    main_ddpg(agent, max_n_traj, scaler)
+    main_ddpg(agent, scaler)
 
 def get_scaler(env):
     """scale state variable; easier for NN learning
@@ -115,7 +118,7 @@ def calculate_l2error():
     return np.sum(l2_error)
 
 
-def main_ddpg(agent, max_n_traj, scaler, batch_size=128, max_n_steps=10**8):
+def main_ddpg(agent, scaler, max_n_steps=10**8):
     """function for applying ddpg to an environment
 
     Parameters
@@ -127,6 +130,10 @@ def main_ddpg(agent, max_n_traj, scaler, batch_size=128, max_n_steps=10**8):
     # get environment and sampler
     env = agent.env
     sampler = agent.sampler
+
+    # get maximal number of trajectories and batch size
+    max_n_traj = agent.max_n_traj
+    batch_size = agent.batch_size
 
     # define folder to save results
     folder_model, folder_result = make_folder('ddpg')

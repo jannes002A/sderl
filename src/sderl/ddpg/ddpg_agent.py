@@ -40,7 +40,7 @@ class DDPGAgent:
     """
 
     def __init__(self, sampler, hidden_size=256, actor_learning_rate=1e-4, critic_learning_rate=1e-3,
-                 gamma=0.99, tau=1e-2, max_memory_size=50000, stop=0.0):
+                 gamma=0.99, tau=1e-2, max_memory_size=50000, stop=0.0, max_n_traj=15000, batch_size=128):
         """Initialization of the DDPG Agent
 
          Parameters
@@ -76,6 +76,8 @@ class DDPGAgent:
         self.gamma = gamma
         self.tau = tau
         self.stop = stop
+        self.max_n_traj = max_n_traj
+        self.batch_size = batch_size
 
         # networks
         self.hidden_size = hidden_size
@@ -100,10 +102,14 @@ class DDPGAgent:
         self.critic_optimizer = optim.Adam(self.critic.parameters(), lr=critic_learning_rate)
 
         # define logging name
-        self.log_name = self.env.name + '_ddpg_' + str(self.seed) + '_' + str(hidden_size) \
-                 + '_' + str('{:1.8f}'.format(actor_learning_rate)) \
-                 + '_' + str('{:1.8f}'.format(critic_learning_rate)) \
-                 + '_' + str(abs(stop))
+        self.log_name = self.env.name + '_ddpg' \
+                      + str('_{:d}'.format(self.seed)) \
+                      + str('_{:d}'.format(hidden_size)) \
+                      + str('_{:.0e}'.format(actor_learning_rate)) \
+                      + str('_{:.0e}'.format(critic_learning_rate)) \
+                      + str('_{:.1f}'.format(abs(stop))) \
+                      + str('_{:.0e}'.format(max_n_traj)) \
+                      + str('_{:.0e}'.format(batch_size))
 
 
     def get_action(self, state):
