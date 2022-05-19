@@ -13,6 +13,7 @@ import sklearn.preprocessing
 
 from sderl.utils.make_folder import make_folder
 from sderl.utils.config import DATA_DIR_PATH
+from sderl.hjb.hjb_solver_1d import SolverHJB1d
 from sderl.soc.networks import FeedForwardNN
 
 class SOCAgent:
@@ -38,20 +39,22 @@ class SOCAgent:
 
     """
 
-    def __init__(self, sampler, hidden_size=256, actor_learning_rate=1e-2,
-                 gamma=0.99, stop=-4., batch_size=10**3):
-        """Initialization of the SOC Agent
+    def __init__(self, sampler, gamma=1., hidden_size=256, learning_rate=1e-2,
+                 stop=-3., batch_size=None, seed=1):
+        """ Initialization of the SOC Agent
 
-         Parameters
-         ----------
-         sampler : object
+        Parameters
+        ----------
+        sampler : object
             sampler object
-         hidden_size: int default 256
-            size of the hidden layer
-         actor_learning_rate : float
-            learn rate of the actor network
-         gamma float default 0.99:
-            decay parameter
+        hidden_size : int
+            size of the hidden layer (default 256)
+        learning_rate : float
+            learn rate of the network
+        gamma : float
+            decay parameter (default 1.)
+        seed : int
+            seed (default 1)
 
          """
         # sampler
@@ -67,7 +70,7 @@ class SOCAgent:
         self.d_action_space = self.env.dim[0]
         self.gamma = gamma
         self.stop = stop
-        self.batch_size = batch_size
+        self.batch_size = sampler.K
 
         # actor network
         self.hidden_size = hidden_size
@@ -75,34 +78,55 @@ class SOCAgent:
                                    n_layers=3, activation='tanh')
 
         # initialize actor optimizer
-        self.lrate = actor_learning_rate
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=actor_learning_rate)
+        self.lrate = learning_rate
+        self.optimizer = optim.Adam(self.actor.parameters(), lr=learning_rate)
 
         # get pytorch device
         self.device = T.device("cuda") if T.cuda.is_available() else T.device("cpu")
 
         # define log name
-        self.log_name = self.env.name + '_soc_' + str(self.hidden_size) + '_' \
-                + str('{:.0e}'.format(self.lrate)) + '_' + str('{:.0e}'.format(batch_size))
+        self.log_name = self.env.name + '_soc' \
+                      + str('_{:d}'.format(self.sampler.seed)) \
+                      + str('_{:d}'.format(hidden_size)) \
+                      + str('_{:.0e}'.format(self.lrate)) \
+                      + str('_{:.1f}'.format(abs(stop))) \
+                      + str('_{:.0e}'.format(self.batch_size))
 
+    def save_json_file(self, success, max_len, returns, run_avg_returns,
+                       steps, l2_errors, eucl_dist_avgs):
+        """
+        """
 
-    def get_json_dict(self, returns, run_avg_returns, steps, l2_error, success, max_len):
-
-        tmp = {
+        # dictionary
+        dicc = {
             'name': self.env.name,
-            'algo': 'soc',
             'beta': self.env.beta,
+            'alpha_i': self.env.alpha[0].item(),
+            'seed': self.sampler.seed,
+            'dt': self.sampler.dt,
+            'algo': 'soc',
             'stop': self.stop,
             'net_size': self.hidden_size,
-            'lrate_actor': self.lrate,
-            'returns': returns,
-            'run_avg_returns': run_avg_returns,
-            'step': steps,
-            'l2_error': l2_error,
+            'lrate': self.lrate,
+            'batch_size': self.batch_size,
             'success': success,
             'max_len': max_len,
+            'returns': returns,
+            'run_avg_returns': run_avg_returns,
+            'steps': steps,
+            'l2_errors': l2_errors,
+            'eucl_dist_avgs': eucl_dist_avgs,
         }
-        return tmp
+
+        # get directory to store the results
+        _, results_dir_path = make_folder('soc')
+
+        # json file path
+        json_path = os.path.join(results_dir_path, self.log_name + '.json')
+
+        # write file
+        with open(json_path, 'w') as file:
+            json.dump(dicc, file)
 
 
     def get_scaler(self):
@@ -176,15 +200,56 @@ class SOCAgent:
         """
 
         # reset gradients
-        self.actor_optimizer.zero_grad()
+        self.optimizer.zero_grad()
 
         # compute gradients
         self.eff_loss.backward()
 
         # update paramters
-        self.actor_optimizer.step()
+        self.optimizer.step()
 
-    def train(self, max_n_ep=100, max_n_steps='1e8'):
+    def save_network_model(self, instant='inital'):
+        """
+        Parameters
+        ----------
+        instant : str
+            initial or last
+        """
+
+        # get directory to store the network models
+        model_dir_path, _= make_folder('soc')
+
+        # actor model path
+        actor_path = os.path.join(
+            model_dir_path,
+            self.log_name + '_actor-{}.pkl'.format(instant),
+        )
+
+        # save parameters
+        torch.save(self.actor.state_dict(), actor_path)
+
+    def load_network_model(self, instant='initial'):
+        """
+        Parameters
+        ----------
+        instant : str
+            initial or last
+        """
+
+        # get directory to store the network models
+        model_dir_path, _= make_folder('soc')
+
+        # actor model path
+        actor_path = os.path.join(
+            model_dir_path,
+            self.log_name + '_actor-{}.pkl'.format(instant),
+        )
+
+        # load parameters
+        self.actor.load_state_dict(torch.load(actor_path))
+
+
+    def train(self, max_n_ep=100, max_n_steps=1e8):
         """ train the actor nn by performing sgd of the associated soc problem. The trajectories
             are sampled one after the other
 
@@ -214,8 +279,7 @@ class SOCAgent:
         max_len = 0
 
         # save initialization
-        T.save(self.actor.state_dict(), \
-               os.path.join(model_dir_path, self.log_name + '_soc-actor-start.pkl'))
+        self.save_network_model(instant='initial')
 
         # iteration in the soc sgd
         for i_episode in range(max_n_ep):
@@ -330,16 +394,12 @@ class SOCAgent:
                 success = False
 
             if success or i_episode + 1 == max_n_ep or max_len:
-                T.save(self.actor.state_dict(), \
-                       os.path.join(model_dir_path, self.log_name + '_soc-actor-last.pkl'))
-
-                tmp = self.get_json_dict(returns, run_avg_returns, steps, l2_error, success, max_len)
-
-                with open(os.path.join(result_dir_path, self.log_name + '.json'), 'w') as file:
-                    json.dump(tmp, file)
+                self.save_network_model(instant='last')
 
 
-    def train_batch(self, max_n_ep=100, max_n_steps='1e8'):
+
+
+    def train_batch(self, max_n_ep=100, max_n_steps=1e8):
         """function for applying soc agent to an environment
 
         Parameters
@@ -359,11 +419,12 @@ class SOCAgent:
 
         # define list to store results
         returns = []
-        run_window_len = 10
+        run_window_len = 100
         run_window_returns = deque(maxlen=run_window_len)
         run_avg_returns = []
         steps = []
-        l2_error = []
+        l2_errors = []
+        eucl_dist_avgs = []
 
         # batch size
         batch_size = self.batch_size
@@ -372,8 +433,7 @@ class SOCAgent:
         max_len = 0
 
         # save initialization
-        T.save(self.actor.state_dict(), \
-               os.path.join(model_dir_path, self.log_name + '_soc-actor-start.pkl'))
+        self.save_network_model(instant='initial')
 
         # iteration in the soc sgd
         for i_episode in range(max_n_ep):
@@ -465,10 +525,12 @@ class SOCAgent:
             # compute effective loss
             self.eff_loss = torch.mean(0.5 * det_int_fht + phi_fht.detach() * stoch_int_fht)
 
-            # update  returns
+            # update returns
             returns.append(self.loss.item())
             run_window_returns.append(self.loss)
             run_avg_returns.append(np.mean(run_window_returns).item())
+            steps.append(int(np.round(np.max(work_fht.numpy()) / sampler.dt)))
+            eucl_dist_avgs.append(self.calculate_eucl_distance(h=0.01))
 
             # print reward before update
             msg = 'it.: {:d}, return: {:2.3f}, var(return): {:2.3e}, ' \
@@ -490,25 +552,58 @@ class SOCAgent:
                 success = False
 
             if success or i_episode + 1 == max_n_ep or max_len:
-                T.save(self.actor.state_dict(), \
-                       os.path.join(model_dir_path, self.log_name + '_soc-actor-last.pkl'))
 
-                tmp = self.get_json_dict(returns, run_avg_returns, steps, l2_error, success, max_len)
+                # save parameters of the network
+                self.save_network_model(instant='last')
 
-                with open(os.path.join(result_dir_path, self.log_name + '.json'), 'w') as file:
-                    json.dump(tmp, file)
+                # save statistics in a json file
+                self.save_json_file(success, max_len, returns, run_avg_returns,
+                                    steps, l2_errors, eucl_dist_avgs)
 
 
-    def get_hjb_solution(self):
+    def get_hjb_solution(self, h=0.01):
+        """ compute hjb solution if not done before.
 
-        # load hjb solution from data
-        self.pde_sol = np.load(os.path.join(DATA_DIR_PATH, 'hjb-pdf/u_pde_1d.npy'))
-        self.x_pde = np.load(os.path.join(DATA_DIR_PATH, 'hjb-pdf/x_upde_1d.npy'))
-
-    def calculate_l2error(self):
-        """Calculates the l2 error.
-        Predicts the current used control from the network and compares it with a precalculated solution
-        - TODO implement evaluation on trajectory
+        Parameters
+        ----------
+        h : float
+            discretization step
         """
-        l2_error = [(agent.get_action(scale_state(x_pde[i])).item()-pde_sol[i])**2 for i in (range(len(x_pde)))]
-        return np.sum(l2_error)
+
+        # hjb solver
+        sol_hjb = SolverHJB1d(self.env, h=0.01, lb=-3., ub=3.)
+
+        # compute soltuion
+        if not sol_hjb.load():
+
+            # compute hjb solution 
+            sol_hjb.solve_bvp()
+            sol_hjb.compute_value_function()
+            sol_hjb.compute_optimal_control()
+
+            sol_hjb.save()
+
+        return sol_hjb.domain_h, sol_hjb.psi, sol_hjb.value_function, sol_hjb.u_opt
+
+    def calculate_eucl_distance(self, h=0.01):
+        """ calculates the averaged euclidian distance between the approximated control and the control
+            obtained by solving the hjb equation evaluated along the discretized domain.
+        """
+        # get hjb solution
+        x_pde, _, _, u_pde = self.get_hjb_solution(h)
+
+        # number of nodes
+        n_nodes = u_pde.shape[0]
+
+        # evaluate control approximation in the domain
+        u_appr = self.get_action(
+            T.tensor(x_pde).reshape(n_nodes, 1)
+        ).reshape(n_nodes).detach().numpy()
+
+        return np.mean(np.abs(u_appr - u_pde)).item()
+
+    def calculate_l2_error(self):
+        """ calculates the L^2 error between the approximated control and the control
+            obtained by solving the hjb equation along a sampled trajectory.
+        """
+        #TODO! 

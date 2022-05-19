@@ -235,6 +235,7 @@ class SolverHJB1d(object):
         # save arrays in a npz file
         jnp.savez(
             self.file_path,
+            domain_h=self.domain_h,
             psi=self.psi,
             value_function=self.value_function,
             u_opt=self.u_opt,
