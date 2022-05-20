@@ -1,15 +1,16 @@
-from collections import deque, namedtuple
+from collections import deque
 import json
 import os
 
 import numpy as np
 import sklearn.preprocessing
-import torch as T
+import torch as torch
 import torch.optim as optim
 import torch.nn.utils as utils
 from torch.autograd import Variable
 
 from sderl.reinforce.networks import Policy
+from sderl.hjb.hjb_solver_1d import SolverHJB1d
 from sderl.utils.make_folder import make_folder
 
 
@@ -28,7 +29,7 @@ class ReinforceAgent(object):
     #https://github.com/chingyaoc/pytorch-REINFORCE/blob/master/reinforce_continuous.py
     """
 
-    def __init__(self, sampler, hidden_size, alpha=5e-4, gamma=0.99, stop=-4.):
+    def __init__(self, sampler, hidden_size, lrate=5e-4, gamma=0.99, stop=-4.):
         """ init method
 
         Parameters
@@ -37,7 +38,7 @@ class ReinforceAgent(object):
             sampler object
         hidden_size: int default 256
             size of the hidden layer
-        actor_learning_rate : float
+        lrate : float
             learn rate of the actor network
         gamma: float default 0.99
             decay parameter
@@ -51,7 +52,7 @@ class ReinforceAgent(object):
 
         # discounting factor and reinforce learning rate
         self.gamma = gamma
-        self.alpha = alpha
+        self.lrate = lrate
 
         # stop criteria for the training
         self.stop = stop
@@ -63,11 +64,92 @@ class ReinforceAgent(object):
         self.model = Policy(input_size, hidden_size, output_size)
         self.model = self.model.float().cpu()
 
-        self.optimizer = optim.Adam(self.model.parameters(), lr=alpha)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lrate)
         self.model.train()
 
         # get pytorch device
-        self.device = T.device('cuda') if T.cuda.is_available() else T.device('cpu')
+        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+
+        # define log name
+        self.log_name = self.env.name + '_reinforce' \
+                      + str('_{:d}'.format(self.sampler.seed)) \
+                      + str('_{:d}'.format(hidden_size)) \
+                      + str('_{:.0e}'.format(self.lrate)) \
+                      + str('_{:.1f}'.format(abs(stop)))
+
+    def save_json_file(self, success, returns, run_avg_returns,
+                       steps):
+        """
+        """
+
+        # dictionary
+        dicc = {
+            'name': self.env.name,
+            'beta': self.env.beta,
+            'alpha_i': self.env.alpha[0].item(),
+            'seed': self.sampler.seed,
+            'dt': self.sampler.dt,
+            'algo': 'reinforce',
+            'stop': self.stop,
+            'hidden_size': self.hidden_size,
+            'lrate': self.lrate,
+            'success': success,
+            'returns': returns,
+            'run_avg_returns': run_avg_returns,
+            'steps': steps,
+            #'l2_errors': l2_errors,
+            #'eucl_dist_avgs': eucl_dist_avgs,
+        }
+
+        # get directory to store the results
+        _, results_dir_path = make_folder('reinforce')
+
+        # json file path
+        json_path = os.path.join(results_dir_path, self.log_name + '.json')
+
+        # write file
+        with open(json_path, 'w') as file:
+            json.dump(dicc, file)
+
+    def save_network_model(self, instant='inital'):
+        """
+        Parameters
+        ----------
+        instant : str
+            initial or last
+        """
+
+        # get directory to store the network models
+        model_dir_path, _= make_folder('reinforce')
+
+        # actor model path
+        model_path = os.path.join(
+            model_dir_path,
+            self.log_name + '_model-{}.pkl'.format(instant),
+        )
+
+        # save parameters
+        torch.save(self.model.state_dict(), model_path)
+
+    def load_network_model(self, instant='initial'):
+        """
+        Parameters
+        ----------
+        instant : str
+            initial or last
+        """
+
+        # get directory to store the network models
+        model_dir_path, _= make_folder('reinforce')
+
+        # actor model path
+        model_path = os.path.join(
+            model_dir_path,
+            self.log_name + '_model-{}.pkl'.format(instant),
+        )
+
+        # load parameters
+        self.model.load_state_dict(torch.load(model_path))
 
     def get_scaler(self):
         """ get scaler object to scale the state variable. It is easier for NN learning.
@@ -149,7 +231,7 @@ class ReinforceAgent(object):
 
         # initialize state
         state = self.sampler.reset()
-        state = T.Tensor(self.scale_state(state))
+        state = torch.Tensor(self.scale_state(state))
 
         self.entropies = []
         self.log_probs = []
@@ -176,14 +258,14 @@ class ReinforceAgent(object):
             self.rewards.append(reward.item())
 
             # update state
-            state = T.Tensor(self.scale_state(new_state))
+            state = torch.Tensor(self.scale_state(new_state))
 
     def update_parameters_bf(self):
         """ basic Reinforce algorithm (brute force)
         """
 
         # initialize return and accomulated log probabilities
-        ret = T.zeros(1)
+        ret = torch.zeros(1)
         logs = 0
 
         # number of rewards
@@ -220,7 +302,7 @@ class ReinforceAgent(object):
         """
 
         # initialize return and loss
-        ret = T.zeros(1)
+        ret = torch.zeros(1)
         loss = 0
 
         # number of rewards
@@ -259,14 +341,14 @@ class ReinforceAgent(object):
         loss = 0
 
         # alternatively one can define the loss as a n_traj array i.e.
-        # loss = torch.Tensor(1,len(trajectories))
+        # loss = torch.torchensor(1,len(trajectories))
         # loss[0, k] = (t_loss / len(t.rewards))
         # loss = loss.mean()
 
         for i_traj in range(self.n_traj):
 
             # initialize return and loss
-            t_return = T.zeros(1, 1)
+            t_return = torch.zeros(1, 1)
             t_loss = 0
 
             # trajectory rewards, log prob and entropies
@@ -309,13 +391,17 @@ class ReinforceAgent(object):
         """ train policy following a REINFORCE type algorithm
         """
 
-        folder_model, folder_result = make_folder('reinforce')
+        model_dir_path, results_dir_path = make_folder('reinforce')
 
         # initialize lists
-        rewards = []
-        avg_rewards = []
-        rewards_window = deque(maxlen=100)
+        returns = []
+        run_window_len = 100
+        returns_window = deque(maxlen=run_window_len)
+        run_avg_returns = []
         steps = []
+
+        # save policy model
+        self.save_network_model('initial')
 
         for i_episode in range(max_n_ep):
 
@@ -323,51 +409,39 @@ class ReinforceAgent(object):
             self.generate_episode()
 
             # save statistics
-            rewards.append(self.score.item())
-            rewards_window.append(self.score)
-            avg_rewards.append(np.mean(rewards_window).item())
+            returns.append(self.score.item())
+            returns_window.append(self.score)
+            run_avg_returns.append(np.mean(returns_window).item())
             steps.append(self.step)
 
             # print episode
             msg = 'ep: {:d}, score: {:2.3f}, avg score: {:2.3f}, steps: {:d}'.format(
                 i_episode,
                 self.score,
-                avg_rewards[-1],
+                run_avg_returns[-1],
                 steps[-1],
             )
             print(msg)
 
             # policy update
-            #self.update_parameters_bf()
-            self.update_parameters()
+            self.update_parameters_bf()
+            #self.update_parameters()
 
-            # check if goal is reached
-            success = 1 if (avg_rewards[-1] > self.stop) and (i_episode > 100) else 0
+            # check if goal is reached 
+            if run_avg_returns[-1] > self.stop and i_episode > run_window_len:
+                success = True
+            else:
+                success = False
 
             if success or i_episode + 1 == max_n_ep:
-
-                # log name
-                log_name = self.env.name + '_reinforce' + '_' + str(self.hidden_size) + '_' \
-                         + str('{:1.8f}'.format(self.alpha)) + '_' + str(abs(self.stop))
+            #if success or i_episode + 1 == max_n_ep or max_len:
+                self.save_network_model(instant='last')
 
                 # save policy model
-                T.save(self.model.state_dict(), os.path.join(folder_model, log_name + '.pkl'))
+                self.save_network_model('final')
 
                 # save log
-                tmp = {'name': self.env.name,
-                    'algo': 'reinforce',
-                    'beta': self.env.beta,
-                    'stop': self.stop,
-                    'net_size': self.hidden_size,
-                    'lrate': self.alpha,
-                    'success': success,
-                    'reward': rewards,
-                    'avg_reward': avg_rewards,
-                    'steps': steps,
-
-                }
-                with open(os.path.join(folder_result, log_name + '.json'), 'w') as file:
-                    json.dump(tmp, file)
+                self.save_json_file(success, returns, run_avg_returns, steps)
 
     def train_batch(self, max_n_ep, n_traj):
         """ train policy following a REINFORCE type algorithm using a batch of trajectories
@@ -413,3 +487,27 @@ class ReinforceAgent(object):
             msg = '\repisode: {},\t reward: {},\t avg_reward: {}' \
                   ''.format(i_epoch, scores[-1], avg_score[-1])
             print(msg)
+
+    def get_hjb_solution(self, h=0.01):
+        """ compute hjb solution if not done before.
+
+        Parameters
+        ----------
+        h : float
+            discretization step
+        """
+
+        # hjb solver
+        sol_hjb = SolverHJB1d(self.env, h=0.01, lb=-3., ub=3.)
+
+        # compute soltuion
+        if not sol_hjb.load():
+
+            # compute hjb solution 
+            sol_hjb.solve_bvp()
+            sol_hjb.compute_value_function()
+            sol_hjb.compute_optimal_control()
+
+            sol_hjb.save()
+
+        return sol_hjb.domain_h, sol_hjb.psi, sol_hjb.value_function, sol_hjb.u_opt

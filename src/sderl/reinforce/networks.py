@@ -1,12 +1,12 @@
 import math
 
-import torch as T
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 
 # pi constant as a tensor
-pi = Variable(T.FloatTensor([math.pi])).cpu()
+pi = Variable(torch.FloatTensor([math.pi])).cpu()
 
 class Policy(nn.Module):
     """ policy network
@@ -61,7 +61,7 @@ class Policy(nn.Module):
             mean and variance of the Gaussian function
         """
         x = inputs
-        x = F.relu(self.linear1(x))
+        x = torch.tanh(self.linear1(x))
         mu = self.linear2(x)
         sigma_sq = self.linear2_(x)
         sigma_sq = F.softplus(sigma_sq)
@@ -79,7 +79,7 @@ class Policy(nn.Module):
         mu, sigma_sq = self.forward(Variable(state).cpu())
 
         # normal sampled centered at mu
-        eps = T.randn(mu.size())
+        eps = torch.randn(mu.size())
 
         # return normal sampled  action
         return (mu + sigma_sq.sqrt() * Variable(eps).cpu()).data

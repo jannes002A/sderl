@@ -1,13 +1,20 @@
-#!/bin/python
+#!/usr/bin/env python
 
 import argparse
+import json
 import itertools
+import os
 
 import jax.numpy as jnp
+import numpy as np
+import matplotlib.pyplot as plt
+import torch as T
 
-from sderl.reinforce.reinforce_agent import ReinforceAgent
 import molecules.models.double_well as dw
 import molecules.methods.euler_maruyama as em
+from sderl.reinforce.reinforce_agent import ReinforceAgent
+from sderl.reinforce.visual_reinforce import get_reinforce_plots
+from sderl.utils.make_folder import make_folder
 
 def get_parser():
     parser = argparse.ArgumentParser()
@@ -15,12 +22,10 @@ def get_parser():
     return parser
 
 def main():
-    """ Script for running reinforce agent with the SDE environment
-    """
 
     # lists of parameters
-    seeds = [1, 2, 3]
-    net_hidden_sizes = [32, 256]
+    seeds = [1, 2, 3, 4]
+    net_hidden_sizes = [32, 64, 128, 256]
     lrates = [1e-2, 1e-3, 1e-4, 1e-5]
 
     # list of parameters combinations
@@ -32,28 +37,32 @@ def main():
     hidden_size = para[int(args.b)][1]
     lrate = para[int(args.b)][2]
 
-    # define environment
+    # set model
     d = 1
-    alpha_i = 1.
-    beta = 2.
+    beta = 1.0
+    alpha_i = 1.0
     env = dw.DoubleWell(stop=[1.0], dim=d, beta=beta, alpha=[alpha_i])
 
     # initial position
     x0 = jnp.array([-1.0]*d)
 
-    # define sampling method
-    dt = 0.01
-    sampler = em.EulerMaru(env, x0, dt=dt, seed=seed)
+    # set sampler
+    sampler = em.EulerMaru(env, start=x0, dt=0.01, seed=seed)
 
-    # initialize reinforce object
-    stop = -3.
+    # initialize SOC agent
+    stop = -3.0
     agent = ReinforceAgent(sampler, hidden_size=hidden_size, lrate=lrate, gamma=1.0, stop=stop)
 
-    # train
-    max_n_ep = 10**5
-    max_n_steps = 10e+8
-    agent.train(max_n_ep)
+    # path of the model and the results of the soc agent
+    model_dir_path, result_dir_path = make_folder('reinforce')
 
+    # load results
+    file_path = os.path.join(result_dir_path, agent.log_name + '.json')
+    with open(file_path) as f:
+           data = json.load(f)
+
+    # get plots
+    get_reinforce_plots(data)
 
 if __name__ == '__main__':
     main()
