@@ -39,6 +39,11 @@ def main():
     net_size = para[args.b][2]
     lrate = para[args.b][3]
 
+    seed = 3
+    batch_size = 1000
+    net_size = 256
+    lrate = 1e-02
+
     # set model
     d = 1
     beta = 2.0
@@ -49,7 +54,7 @@ def main():
     xinit = -1.0 * jnp.ones((batch_size, d))
 
     # set sampler
-    sampler = em.EulerMaru(env, start=xinit, K=batch_size, dt=0.01, seed=0)
+    sampler = em.EulerMaru(env, start=xinit, K=batch_size, dt=0.01, seed=seed)
 
     # initialize SOC agent
     stop = -4.0

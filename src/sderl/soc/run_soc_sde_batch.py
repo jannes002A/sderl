@@ -47,13 +47,12 @@ def main():
     sampler = em.EulerMaru(env, start=xinit, K=batch_size, dt=0.01, seed=seed)
 
     # define SOC agent
-    stop = - 4.0
+    stop = - 3.0
     agent = SOCAgent(sampler, hidden_size=net_size, learning_rate=lrate,
                      stop=stop)
 
     # train agent
-    max_n_ep = 10**3
-    agent.train_batch(max_n_ep)
+    agent.train_batch(max_n_updates=10**3)
 
 
 if __name__ == '__main__':
