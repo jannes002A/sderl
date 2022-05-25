@@ -42,10 +42,16 @@ class Policy(nn.Module):
         """
         super(Policy, self).__init__()
 
-        # set three network layers
+        # mean and sigma share the same first layer
         self.linear1 = nn.Linear(input_size, hidden_size)
         self.linear2 = nn.Linear(hidden_size, output_size)
         self.linear2_ = nn.Linear(hidden_size, output_size)
+
+        # mean and sigma have different parametrizations
+        #self.mu_linear1 = nn.Linear(input_size, hidden_size)
+        #self.mu_linear2 = nn.Linear(hidden_size, output_size)
+        #self.sigma_linear1 = nn.Linear(input_size, hidden_size)
+        #self.sigma_linear2 = nn.Linear(hidden_size, output_size)
 
     def forward(self, inputs):
         """ forward pass
@@ -60,11 +66,17 @@ class Policy(nn.Module):
         tuple:
             mean and variance of the Gaussian function
         """
+
         x = inputs
         x = torch.tanh(self.linear1(x))
         mu = self.linear2(x)
-        sigma_sq = self.linear2_(x)
-        sigma_sq = F.softplus(sigma_sq)
+        sigma_sq = F.softplus(self.linear2_(x))
+
+        #mu = torch.tanh(self.mu_linear1(inputs))
+        #mu = self.mu_linear2(mu)
+
+        #sigma_sq = torch.tanh(self.sigma_linear1(inputs))
+        #sigma_sq = F.softplus(self.sigma_linear2(sigma_sq))
 
         return mu, sigma_sq
 

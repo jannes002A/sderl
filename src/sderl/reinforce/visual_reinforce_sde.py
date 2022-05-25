@@ -24,8 +24,8 @@ def get_parser():
 def main():
 
     # lists of parameters
-    seeds = [1, 2, 3, 4]
-    net_hidden_sizes = [32, 64, 128, 256]
+    seeds = [1, 2, 3]
+    net_hidden_sizes = [32, 256]
     lrates = [1e-2, 1e-3, 1e-4, 1e-5]
 
     # list of parameters combinations
@@ -39,7 +39,7 @@ def main():
 
     # set model
     d = 1
-    beta = 1.0
+    beta = 2.0
     alpha_i = 1.0
     env = dw.DoubleWell(stop=[1.0], dim=d, beta=beta, alpha=[alpha_i])
 
@@ -51,7 +51,8 @@ def main():
 
     # initialize SOC agent
     stop = -3.0
-    agent = ReinforceAgent(sampler, hidden_size=hidden_size, lrate=lrate, gamma=1.0, stop=stop)
+    agent = ReinforceAgent(sampler, hidden_size=hidden_size, lrate=lrate, gamma=1.0,
+                           algorithm_type='brute-force', stop=stop)
 
     # path of the model and the results of the soc agent
     model_dir_path, result_dir_path = make_folder('reinforce')

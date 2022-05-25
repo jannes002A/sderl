@@ -15,7 +15,7 @@ def get_parser():
     return parser
 
 def main():
-    """ Script for running reinforce agent with the SDE environment
+    """ script for running reinforce agent with the SDE environment
     """
 
     # lists of parameters
@@ -47,11 +47,11 @@ def main():
 
     # initialize reinforce object
     stop = -3.
-    agent = ReinforceAgent(sampler, hidden_size=hidden_size, lrate=lrate, gamma=1.0, stop=stop)
+    agent = ReinforceAgent(sampler, hidden_size=hidden_size, lrate=lrate,
+                           gamma=1.0, stop=stop, algorithm_type='brute-force')
 
     # train
-    max_n_ep = 10**5
-    max_n_steps = 10e+8
+    max_n_ep = 10**4
     agent.train(max_n_ep)
 
 

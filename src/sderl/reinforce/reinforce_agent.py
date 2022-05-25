@@ -13,6 +13,12 @@ from sderl.reinforce.networks import Policy
 from sderl.hjb.hjb_solver_1d import SolverHJB1d
 from sderl.utils.make_folder import make_folder
 
+REINFORCE_ALGORITHMS = [
+    'brute-force',
+    'brute-force-batch',
+    'base-line-entropy',
+]
+
 
 class ReinforceAgent(object):
     """
@@ -29,30 +35,43 @@ class ReinforceAgent(object):
     #https://github.com/chingyaoc/pytorch-REINFORCE/blob/master/reinforce_continuous.py
     """
 
-    def __init__(self, sampler, hidden_size, lrate=5e-4, gamma=0.99, stop=-4.):
+    def __init__(self, sampler, hidden_size=256, lrate=5e-4, gamma=0.99, stop=-4.,
+                 batch_size=None, algorithm_type='brute_force'):
         """ init method
 
         Parameters
         ----------
         sampler : object
             sampler object
-        hidden_size: int default 256
-            size of the hidden layer
+        hidden_size: int
+            size of the hidden layer (default 256)
         lrate : float
-            learn rate of the actor network
-        gamma: float default 0.99
-            decay parameter
-        stop: float default 0.99
-            stop value for the average reward
+            learn rate of the actor network (default 0.0001)
+        gamma: float
+            decay parameter (default 0.99)
+        stop: float
+            stop value for the average reward (default - 4.)
+        batch_size: int, optional
+            batch size
+        algorithm_type: str
+            type of reinforce algorithm which we want to implement (default "brute force")
 
         """
-        # environment
+        # environment and sampler
         self.env = sampler.env
         self.sampler = sampler
 
         # discounting factor and reinforce learning rate
         self.gamma = gamma
         self.lrate = lrate
+
+        # batch size
+        if batch_size is not None:
+            self.batch_size = batch_size
+
+        # type of algorithm
+        assert algorithm_type in REINFORCE_ALGORITHMS, ''
+        self.algorithm_type = algorithm_type
 
         # stop criteria for the training
         self.stop = stop
@@ -71,11 +90,12 @@ class ReinforceAgent(object):
         self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
 
         # define log name
-        self.log_name = self.env.name + '_reinforce' \
-                      + str('_{:d}'.format(self.sampler.seed)) \
-                      + str('_{:d}'.format(hidden_size)) \
-                      + str('_{:.0e}'.format(self.lrate)) \
-                      + str('_{:.1f}'.format(abs(stop)))
+        self.log_name = self.env.name \
+                      + '_reinforce-{}'.format(algorithm_type) \
+                      + '_{:d}'.format(self.sampler.seed) \
+                      + '_{:d}'.format(hidden_size) \
+                      + '_{:.0e}'.format(self.lrate) \
+                      + '_{:.1f}'.format(abs(stop))
 
     def save_json_file(self, success, returns, run_avg_returns,
                        steps):
@@ -89,7 +109,7 @@ class ReinforceAgent(object):
             'alpha_i': self.env.alpha[0].item(),
             'seed': self.sampler.seed,
             'dt': self.sampler.dt,
-            'algo': 'reinforce',
+            'algo': self.algorithm_type,
             'stop': self.stop,
             'hidden_size': self.hidden_size,
             'lrate': self.lrate,
@@ -260,7 +280,7 @@ class ReinforceAgent(object):
             # update state
             state = torch.Tensor(self.scale_state(new_state))
 
-    def update_parameters_bf(self):
+    def update_params_bf(self):
         """ basic Reinforce algorithm (brute force)
         """
 
@@ -272,13 +292,13 @@ class ReinforceAgent(object):
         n_rewards = len(self.rewards)
 
         # brute force REINFORCE algorithm
-        for i in range(n_rewards):
+        for n in range(n_rewards):
 
             # update return
-            ret -= self.gamma**i * self.rewards[i]
+            ret -= self.gamma**n * self.rewards[n]
 
             # update accomulated log probabilities
-            logs += self.log_probs[i]
+            logs += self.log_probs[n]
 
         # define loss
         loss = (ret * logs) / n_rewards
@@ -295,7 +315,7 @@ class ReinforceAgent(object):
         # update parameters
         self.optimizer.step()
 
-    def update_parameters(self):
+    def update_params_entropy(self):
         """ Reinforce algorithm with base line. The update of parameters follows the
         gradient acent algorithm (therefore the loss is negative)
 
@@ -334,7 +354,58 @@ class ReinforceAgent(object):
         # update parameters
         self.optimizer.step()
 
-    def update_parameter_traj(self):
+    def update_params_bf_batch(self):
+        """ basic Reinforce algorithm with a batch of trajectories
+        """
+
+        # initialize loss for the batch of trajectories
+        loss = 0
+
+        # alternatively one can define the loss as a n_traj array i.e.
+        # loss = torch.torchensor(1,len(trajectories))
+        # loss[0, k] = (t_loss / len(t.rewards))
+        # loss = loss.mean()
+
+        for i in range(self.batch_size):
+
+            # initialize return and accomulated log probabilities for each episode
+            ep_ret = torch.zeros(1, 1)
+            ep_logs = 0
+
+            # trajectory rewards, log prob and entropies
+            ep_rewards = self.batch_rewards[i]
+            ep_log_probs = self.batch_log_probs[i]
+
+            # number of rewards
+            n_ep_rewards = len(ep_rewards)
+
+            for n in range(n_ep_rewards):
+
+                # update return
+                ep_ret -= self.gamma**n * ep_rewards[n]
+
+                # update accomulated log probabilities
+                ep_logs += ep_log_probs[n]
+
+            # update loss
+            loss += (ep_ret * ep_logs) / n_ep_rewards
+
+        # normalize loss with respect to the batch size
+        loss = loss / self.batch_size
+
+        # reset gradients
+        self.optimizer.zero_grad()
+
+        # compute gradients
+        loss.backward()
+
+        # gradient boundary to make sure that the gradient descent does not explode
+        utils.clip_grad_norm_(self.model.parameters(), 40)
+
+        # update parameters
+        self.optimizer.step()
+
+    def update_params_entropy_batch(self):
         """ Reinforce algorithm with base line and a batch of trajectories
         """
         # initialize loss for the batch of trajectories
@@ -345,7 +416,7 @@ class ReinforceAgent(object):
         # loss[0, k] = (t_loss / len(t.rewards))
         # loss = loss.mean()
 
-        for i_traj in range(self.n_traj):
+        for i in range(self.batch_size):
 
             # initialize return and loss
             t_return = torch.zeros(1, 1)
@@ -424,8 +495,8 @@ class ReinforceAgent(object):
             print(msg)
 
             # policy update
-            self.update_parameters_bf()
-            #self.update_parameters()
+            self.update_params_bf()
+            #self.update_params()
 
             # check if goal is reached 
             if run_avg_returns[-1] > self.stop and i_episode > run_window_len:
@@ -434,7 +505,6 @@ class ReinforceAgent(object):
                 success = False
 
             if success or i_episode + 1 == max_n_ep:
-            #if success or i_episode + 1 == max_n_ep or max_len:
                 self.save_network_model(instant='last')
 
                 # save policy model
@@ -443,30 +513,38 @@ class ReinforceAgent(object):
                 # save log
                 self.save_json_file(success, returns, run_avg_returns, steps)
 
-    def train_batch(self, max_n_ep, n_traj):
+    def train_batch(self, max_n_updates):
         """ train policy following a REINFORCE type algorithm using a batch of trajectories
         """
 
-        # number of trajectories
-        self.n_traj = n_traj
+        model_dir_path, results_dir_path = make_folder('reinforce-batch')
+
+        # batch size
+        batch_size = self.batch_size
 
         # initialize lists
-        mean_total_reward = []
-        global_reward = 0
-        avg_score = deque(maxlen=100)
-        scores = []
+        returns = []
+        var_returns = []
+        run_window_len = 100
+        run_window_returns = deque(maxlen=run_window_len)
+        run_avg_returns = []
+        steps = []
 
-        for i_epoch in range(n_ep_max):
+        # save policy model
+        self.save_network_model('initial')
+
+        for update in range(max_n_updates):
 
             # initialize trajectory lists
             self.batch_rewards = []
             self.batch_log_probs = []
             self.batch_entropies = []
+            self.batch_steps = []
 
-            t_score = []
-            t_total_reward = 0
+            batch_returns= []
+            batch_total_reward = 0
 
-            for t in range(n_traj):
+            for _ in range(batch_size):
 
                 # sample 1 episode
                 self.generate_episode()
@@ -475,18 +553,38 @@ class ReinforceAgent(object):
                 self.batch_rewards.append(self.rewards)
                 self.batch_log_probs.append(self.log_probs)
                 self.batch_entropies.append(self.entropies)
-                t_score.append(self.score.item())
+                self.batch_steps.append(self.step)
+                batch_returns.append(self.score.item())
 
 
             # policy update
-            self.update_parameter_traj()
+            self.update_params_bf_batch()
+            #self.update_params_entropy_batch()
 
-            scores.append(np.mean(t_score))
-            avg_score.append(np.mean(t_score))
+            returns.append(np.mean(batch_returns).item())
+            var_returns.append(np.var(batch_returns).item())
+            run_window_returns.append(returns[-1])
+            run_avg_returns.append(np.mean(run_window_returns).item())
 
-            msg = '\repisode: {},\t reward: {},\t avg_reward: {}' \
-                  ''.format(i_epoch, scores[-1], avg_score[-1])
+            msg = 'update.: {:d}, return: {:2.3f}, var(return): {:2.3e}, run-avg-return: {:2.3f}' \
+                  ''.format(update, returns[-1], var_returns[-1], run_avg_returns[-1])
             print(msg)
+
+            # check if goal is reached 
+            if run_avg_returns[-1] > self.stop and update > run_window_len:
+                success = True
+            else:
+                success = False
+
+            if success or update + 1 == max_n_updates:
+                self.save_network_model(instant='last')
+
+                # save policy model
+                self.save_network_model('final')
+
+                # save log
+                self.save_json_file(success, returns, run_avg_returns, steps)
+
 
     def get_hjb_solution(self, h=0.01):
         """ compute hjb solution if not done before.

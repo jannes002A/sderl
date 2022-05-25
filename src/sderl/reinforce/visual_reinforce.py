@@ -15,7 +15,7 @@ from sderl.utils.make_folder import make_folder
 def load_all_json_files():
 
     # get directory with the results for the soc agent
-    _, results_dir_path = make_folder('soc')
+    _, results_dir_path = make_folder('reinforce')
 
     # list all json files in directory
     json_file_paths = [
@@ -51,7 +51,7 @@ def get_sampler_with_batch(data):
 def get_reinforce_agent(data):
     sampler = get_sampler(data)
     return ReinforceAgent(sampler, hidden_size=data['hidden_size'], lrate=data['lrate'],
-                          gamma=1.0, stop=data['stop'])
+                          gamma=1.0, stop=data['stop'], algorithm_type=data['algo'])
 
 def get_reinforce_plots(data):
 
@@ -70,21 +70,24 @@ def get_reinforce_plots(data):
 
     # load hjb solution
     h = 0.01
-    domain_h, _, _, u_pde = agent.get_hjb_solution(h)
+    x_pde, _, _, u_pde = agent.get_hjb_solution(h)
+    n_nodes = x_pde.shape[0]
 
     # load initial model
     agent.load_network_model(instant='initial')
 
-    #appr_init = np.array([
-    #    agent.get_action(x.reshape(1, -1), do_scale=False).item() for x in torch.tensor(domain_h)
-    #])
+    # sample control in the domain
+    appr_init = agent.model.sample_action(
+        torch.tensor(x_pde).reshape(n_nodes, 1)
+    ).reshape(n_nodes).detach().numpy()
 
     # load final model
     agent.load_network_model(instant='last')
 
-    #appr_last = np.array([
-    #    agent.get_action(x.reshape(1, -1), do_scale=False).item() for x in torch.tensor(domain_h)
-    #])
+    # sample control in the domain
+    appr_last = agent.model.sample_action(
+        torch.tensor(x_pde).reshape(n_nodes, 1)
+    ).reshape(n_nodes).detach().numpy()
 
     # load soc agent statistics
     returns = np.array(data['returns'])
@@ -95,7 +98,7 @@ def get_reinforce_plots(data):
 
     # do plots
     #plot_potential(env, domain_h)
-    #plot_control(domain_h, appr_init, appr_last, u_pde)
+    plot_control(x_pde, appr_init, appr_last, u_pde)
     plot_returns(returns, run_avg_returns)
     #plot_steps(steps)
     #plot_eucl_dist_avgs(eucl_dist_avgs)
@@ -124,8 +127,8 @@ def plot_control(domain_h, appr_init, appr_last, u_pde):
     ax.set_title('$u^*$')
     ax.set_xlabel('x')
     ax.set_xlim(-2, 2)
-    ax.plot(domain_h, appr_init, label='init', color='tab:blue')
-    ax.plot(domain_h, appr_last, label='final', color='tab:orange')
+    ax.scatter(domain_h, appr_init, label='init', color='tab:blue')
+    ax.scatter(domain_h, appr_last, label='final', color='tab:orange')
     ax.plot(domain_h, u_pde, label='hjb-pde', color='tab:cyan')
     ax.legend()
     plt.show()
